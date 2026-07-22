@@ -1,17 +1,42 @@
 # PulsePlayer
 
-**Production AVPlayer toolkit** for Apple platforms — Swift Package (MIT).
+[![CI](https://github.com/david2701/PulsePlayer/actions/workflows/ci.yml/badge.svg)](https://github.com/david2701/PulsePlayer/actions/workflows/ci.yml)
+[![Swift 6.2+](https://img.shields.io/badge/Swift-6.2%2B-F05138?logo=swift&logoColor=white)](Package.swift)
+[![Platforms](https://img.shields.io/badge/platforms-iOS%20%7C%20iPadOS%20%7C%20tvOS%2017%2B-black)](Package.swift)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![SPM](https://img.shields.io/badge/SPM-compatible-brightgreen.svg)](Package.swift)
 
-Stable session lifecycle · typed state · real transport chrome · SPM-first.
+**Production AVPlayer toolkit** for Apple platforms — one Swift Package, MIT licensed.
+
+Long-lived session · typed state machine · real transport chrome · offline · FairPlay hooks · feed pool.
+
+Not an FFmpeg media center. Not a toy `VideoPlayer` wrapper.
 
 | | |
 | --- | --- |
-| **Platforms** | iOS 17+, iPadOS 17+, tvOS 17+ |
-| **Swift** | 6.2+ (strict concurrency) |
+| **Product focus** | iOS 17+, iPadOS 17+, tvOS 17+ |
+| **Swift** | 6.2+ · language mode 6 · strict concurrency |
 | **Version** | `0.7.2` (`PulsePlayerInfo.version`) |
-| **License** | [MIT](LICENSE) |
+| **Install** | SPM only — no CocoaPods / Carthage |
 
-Not an FFmpeg media center. Not a toy `VideoPlayer` wrapper.
+---
+
+## Why PulsePlayer
+
+Shipping video on Apple usually means either raw `AVPlayer` glue or a heavy commercial SDK. Open-source options are often abandoned wrappers, GPL decoders, or incomplete UI.
+
+PulsePlayer sits in the middle:
+
+| You get | Without |
+| --- | --- |
+| Stable `PlayerSession` lifecycle | Recreating the player every SwiftUI render |
+| Public state machine + `PlayerError` | Ad-hoc `Bool` flags |
+| Chrome modes for feed / detail / custom | One fixed control bar |
+| Offline, queue, live DVR, FairPlay provider | Starting from zero for each product feature |
+| DI seams (`PlayerDependencies`) | Hard-wired system services |
+| Unit tests + CI | “Works on my machine” |
+
+**AVPlayer-first.** Hardware decode, AirPlay, PiP, and HLS stay on Apple’s stack.
 
 ---
 
@@ -39,12 +64,13 @@ dependencies: [
 
 ## Quick start
 
+Own the session **outside** `body`. Never create `PlayerSession` inside a computed view tree.
+
 ```swift
 import PulsePlayer
 import SwiftUI
 
 struct PlayerScreen: View {
-    // Own the session outside `body` — never recreate it on every render.
     @State private var session = PlayerSession(
         configuration: PlayerConfiguration(autoplay: true)
     )
@@ -91,18 +117,18 @@ session.play()
 
 | Area | What you get |
 | --- | --- |
-| **Playback** | HLS + progressive MP4 |
-| **Lifecycle** | Long-lived `PlayerSession` (`@Observable`) |
+| **Playback** | HLS + progressive MP4 via `AVPlayer` |
+| **Lifecycle** | Long-lived `PlayerSession` (`@MainActor`, `@Observable`) |
 | **State** | Public state machine + recoverable `PlayerError` |
 | **Chrome** | `.none` · `.minimal` · `.lite` · `.full` |
-| **Transport** | Seek scrubber with **current / duration** labels, ±10s, mute, volume menu |
+| **Transport** | Scrubber with fixed current / duration labels, ±10s, mute, volume menu |
 | **Gestures** | Double-tap left −10s / right +10s |
 | **Tracks** | Audio + text (HLS embedded and external SRT/VTT) |
 | **Quality** | HLS ladder parse · Auto / manual peak bitrate |
 | **Subtitles** | External SRT/VTT, offset, style, overlay |
 | **System** | PiP, Now Playing, audio session, AirPlay picker |
-| **Feeds** | `PlayerPool` prewarm / rebalance |
-| **Offline** | Download, resume/retry, storage limit (iOS/tvOS) |
+| **Feeds** | `PlayerPool` acquire / prewarm / rebalance |
+| **Offline** | Download, resume/retry, storage limit (iOS / tvOS) |
 | **Playlist** | `PlaybackQueue` + continue watching |
 | **Live** | Seekable DVR window + seek to live edge |
 | **DRM** | FairPlay via `ContentKeyProviding` / `HTTPContentKeyProvider` |
@@ -115,7 +141,7 @@ session.play()
 
 | Mode | Best for | UI |
 | --- | --- | --- |
-| `.full` | Detail / offline | Scrubber + times + transport + overflow menu (tracks, quality, volume) |
+| `.full` | Detail / offline / long-form | Scrubber + times + transport + overflow menu (tracks, quality, volume) |
 | `.lite` | Inline cards | Scrubber + times + play + mute |
 | `.minimal` | Vertical feed | Tap play/pause · double-tap seek · mute |
 | `.none` | Custom UI | Video surface only |
@@ -125,12 +151,33 @@ PulsePlayerView(session: session, chrome: .full)
 PulsePlayerView(session: session, chrome: .minimal)
 ```
 
-Scrubber layout (full / lite):
+Scrubber layout (full / lite) — times use fixed monospaced widths so labels do not jump:
 
 ```text
 0:06  ————●————————  10:00
 [▶] [−10] [+10]          [⋯] [AirPlay] [mute] [⛶]
 ```
+
+---
+
+## Architecture (mental model)
+
+```text
+MediaSource ──► PlayerSession ──► PlaybackControlling (AVPlayerEngine)
+                    │                    │
+                    │ events             │ layer / PiP / tracks
+                    ▼                    ▼
+              PlayerEventBus      PulsePlayerView + chrome
+                    │
+              Offline / Queue / Pool / FairPlay (optional)
+```
+
+- **`PlayerSession`** — host-facing API; `@MainActor` orchestration.
+- **`PlaybackControlling`** — engine protocol (production: `AVPlayerEngine`; tests: mock).
+- **`PlayerDependencies`** — clock, network path, audio session, Now Playing, logging.
+- **UI is optional** — use headless session + your own chrome, or `PulsePlayerView`.
+
+Files stay under **400 lines**; CI enforces it.
 
 ---
 
@@ -176,7 +223,7 @@ await pool.rebalance(visibleIDs: ["1", "2"])
 pool.shutdown()
 ```
 
-Use `PulsePlayerView(session:session, chrome: .minimal)` in cells.
+Use `PulsePlayerView(session: session, chrome: .minimal)` in cells.
 
 ### Subtitles
 
@@ -207,7 +254,7 @@ try OfflineDownloadManager.shared.retry(id: "episode-1")
 try OfflineDownloadManager.shared.enforceStorageLimit()
 ```
 
-Not available on macOS.
+macOS is supported for `swift test` only; offline downloads are not a macOS product surface.
 
 ### Quality, tracks, playlist, live, FairPlay
 
@@ -232,7 +279,7 @@ await queue.play(at: 0)
 await session.load(MediaSource(url: liveURL, isLive: true, dvrWindow: 3600))
 await session.seekToLiveEdge()
 
-// FairPlay (needs Apple FPS cert + your key server — not a mock)
+// FairPlay (Apple FPS cert + your key server — real HTTP path, not a mock)
 session.contentKeyProvider = HTTPContentKeyProvider(
     configuration: .init(
         certificateURL: certURL,
@@ -253,7 +300,7 @@ await session.load(MediaSource(url: vod, adCues: [AdCue(start: 30, duration: 15)
 
 ## Demo app
 
-Interactive iOS demo (Play · Subs · Feed · Pro · Offline):
+Interactive iOS demo — tabs: **Play · Subs · Feed · Pro · Offline**.
 
 ```bash
 cd Examples/PulsePlayerDemo
@@ -261,6 +308,8 @@ xcodegen generate    # if needed
 open PulsePlayerDemo.xcodeproj
 # Run on iPhone Simulator
 ```
+
+Use Apple’s HLS samples in the demo (progressive third-party MP4s often fail with network/policy errors on simulator).
 
 Details: [Examples/PulsePlayerDemo/README.md](Examples/PulsePlayerDemo/README.md)
 
@@ -273,7 +322,7 @@ swift test
 ./Scripts/check-line-count.sh   # fails if any .swift file > 400 lines
 ```
 
-CI: GitHub Actions on `main` (tests + demo build).
+CI (GitHub Actions on `main`): `swift test` + line-count guard + iOS demo build.
 
 Full integration notes: [Documentation/INTEGRATION.md](Documentation/INTEGRATION.md)
 
@@ -283,6 +332,21 @@ Full integration notes: [Documentation/INTEGRATION.md](Documentation/INTEGRATION
 
 - Xcode with **Swift 6.2+**
 - App deployment target **iOS / tvOS 17+**
+- Optional host entitlements: Background Audio, Picture in Picture
+
+---
+
+## Not included (yet)
+
+Honest scope for integrators evaluating the package:
+
+| Topic | Status |
+| --- | --- |
+| Forced HLS variant lock via resource loader | Partial (peak bitrate) |
+| Native HLS interstitial ad parse | Host `AdCue` plugin only |
+| Dedicated tvOS sample app | API + chrome hooks; demo is iOS-first |
+| DocC catalog site | Planned |
+| FairPlay end-to-end without Apple FPS package | Not possible publicly |
 
 ---
 
