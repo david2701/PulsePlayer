@@ -24,18 +24,21 @@ public enum PulsePlayerTVCommands {
 /// Simple focusable transport row for tvOS.
 public struct PulsePlayerTVControls: View {
     let session: PlayerSession
+    let skipInterval: TimeInterval
 
-    public init(session: PlayerSession) {
+    public init(session: PlayerSession, skipInterval: TimeInterval = PulsePlayerTVCommands.defaultSkip) {
         self.session = session
+        self.skipInterval = skipInterval
     }
 
     public var body: some View {
         HStack(spacing: 36) {
             Button {
-                PulsePlayerTVCommands.skipBackward(session: session)
+                PulsePlayerTVCommands.skipBackward(session: session, interval: skipInterval)
             } label: {
                 Image(systemName: "gobackward.10")
                     .font(.title2)
+                    .frame(minWidth: 72, minHeight: 48)
             }
 
             Button {
@@ -43,17 +46,20 @@ public struct PulsePlayerTVControls: View {
             } label: {
                 Image(systemName: session.isPlaying ? "pause.fill" : "play.fill")
                     .font(.largeTitle)
+                    .frame(minWidth: 96, minHeight: 64)
             }
 
             Button {
-                PulsePlayerTVCommands.skipForward(session: session)
+                PulsePlayerTVCommands.skipForward(session: session, interval: skipInterval)
             } label: {
                 Image(systemName: "goforward.10")
                     .font(.title2)
+                    .frame(minWidth: 72, minHeight: 48)
             }
         }
         .buttonStyle(.card)
         .padding()
+        .accessibilityElement(children: .contain)
     }
 }
 #endif

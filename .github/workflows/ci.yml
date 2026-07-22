@@ -7,7 +7,6 @@ on:
     branches: [main]
 
 # Package requires Swift tools 6.3+ (swift-tools-version: 6.3).
-# macos-15 + Xcode 26.3 only ships Swift 6.2.4 — use macos-26 + Xcode 26.6 (Swift 6.3.x).
 env:
   DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 
@@ -52,26 +51,53 @@ jobs:
           set -euo pipefail
           test -d "$DEVELOPER_DIR"
           xcodebuild -version
-          swift --version
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Generate & build demo
+      - name: Generate & build iOS demo
         working-directory: Examples/PulsePlayerDemo
         run: |
           set -euo pipefail
           xcodegen generate
-
           DEST='platform=iOS Simulator,name=iPhone 17'
           if ! xcrun simctl list devices available | grep -q 'iPhone 17'; then
             DEST='platform=iOS Simulator,name=iPhone 16'
           fi
           echo "Building with -destination $DEST"
-
           xcodebuild \
             -project PulsePlayerDemo.xcodeproj \
             -scheme PulsePlayerDemo \
+            -destination "$DEST" \
+            -derivedDataPath ./DerivedData \
+            build CODE_SIGNING_ALLOWED=NO
+
+  build-tv-demo:
+    name: build tvOS demo
+    runs-on: macos-26
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate & build tvOS demo
+        working-directory: Examples/PulsePlayerTVDemo
+        run: |
+          set -euo pipefail
+          xcodegen generate
+          DEST='platform=tvOS Simulator,name=Apple TV'
+          echo "Building with -destination $DEST"
+          xcodebuild \
+            -project PulsePlayerTVDemo.xcodeproj \
+            -scheme PulsePlayerTVDemo \
             -destination "$DEST" \
             -derivedDataPath ./DerivedData \
             build CODE_SIGNING_ALLOWED=NO

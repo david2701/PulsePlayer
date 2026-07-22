@@ -1,0 +1,37 @@
+name: PulsePlayerTVDemo
+options:
+  bundleIdPrefix: com.pulseplayer
+  deploymentTarget:
+    tvOS: "17.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+
+packages:
+  PulsePlayer:
+    path: ../..
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    TARGETED_DEVICE_FAMILY: "3"
+    GENERATE_INFOPLIST_FILE: YES
+    INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.9.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  PulsePlayerTVDemo:
+    type: application
+    platform: tvOS
+    sources:
+      - path: PulsePlayerTVDemo
+    dependencies:
+      - package: PulsePlayer
+        product: PulsePlayer
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pulseplayer.tvdemo
+        PRODUCT_NAME: PulsePlayerTVDemo
+        ENABLE_PREVIEWS: YES

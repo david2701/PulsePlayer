@@ -7,17 +7,29 @@ Versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
-### Planned (0.9)
-
-- Dedicated tvOS demo app (focus / Siri Remote)
-- DocC catalog site
-- GitHub release tags
-
 ### Planned (1.0)
 
 - Hardening pass
 - Real AVFoundation integration tests (device / simulator where stable)
 - Stable public API freeze notes
+
+## [0.9.0] - 2026-07-22
+
+### Added
+
+- **tvOS demo** (`Examples/PulsePlayerTVDemo`) — focusable catalog, full-screen
+  player, `onPlayPauseCommand`, quality menu, cinema layout
+- **DocC** articles: Getting Started, Chrome & Themes, Quality Lock
+- `Scripts/generate-docc.sh` for static DocC HTML
+- CI job **build tvOS demo**
+
+### Changed
+
+- Version `0.9.0`
+- `PulsePlayerTVControls` larger hit targets for remote focus
+- Offline downloads scoped to **iOS only** (`AVAssetDownloadURLSession` unavailable on tvOS)
+- tvOS chrome uses `ProgressView` instead of unavailable `Slider`
+- Fullscreen container skips `statusBarHidden` on tvOS
 
 ## [0.8.0] - 2026-07-22
 

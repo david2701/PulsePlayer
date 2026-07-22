@@ -40,7 +40,9 @@ public struct PulseFullscreenContainer: View {
             }
             .padding(.top, 8)
         }
+        #if !os(tvOS)
         .statusBarHidden(true)
+        #endif
     }
 }
 

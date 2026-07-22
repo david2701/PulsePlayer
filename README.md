@@ -16,7 +16,7 @@ Not an FFmpeg media center. Not a toy `VideoPlayer` wrapper.
 | --- | --- |
 | **Product focus** | iOS 17+, iPadOS 17+, tvOS 17+ |
 | **Swift** | 6.3+ · language mode 6 · strict concurrency |
-| **Version** | `0.8.0` (`PulsePlayerInfo.version`) |
+| **Version** | `0.9.0` (`PulsePlayerInfo.version`) |
 | **Install** | SPM only — no CocoaPods / Carthage |
 
 ---
@@ -52,7 +52,7 @@ https://github.com/david2701/PulsePlayer.git
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.8.0")
+    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.9.0")
 ]
 ```
 
@@ -131,7 +131,7 @@ session.play()
 | **Subtitles** | External SRT/VTT, offset, style, overlay |
 | **System** | PiP, Now Playing, audio session, AirPlay picker |
 | **Feeds** | `PlayerPool` acquire / prewarm / rebalance |
-| **Offline** | Download, resume/retry, storage limit (iOS / tvOS) |
+| **Offline** | Download, resume/retry, storage limit (**iOS**; catalog APIs elsewhere) |
 | **Playlist** | `PlaybackQueue` + continue watching |
 | **Live** | Seekable DVR window + seek to live edge |
 | **DRM** | FairPlay via `ContentKeyProviding` / `HTTPContentKeyProvider` |
@@ -239,7 +239,7 @@ session.applySubtitleStyle(.large)
 session.selectSubtitle(id: nil) // hide
 ```
 
-### Offline (iOS / tvOS)
+### Offline (iOS)
 
 ```swift
 let item = try OfflineDownloadManager.shared.resumeOrEnqueue(
@@ -257,7 +257,7 @@ try OfflineDownloadManager.shared.retry(id: "episode-1")
 try OfflineDownloadManager.shared.enforceStorageLimit()
 ```
 
-macOS is supported for `swift test` only; offline downloads are not a macOS product surface.
+Offline **downloads** require iOS (`AVAssetDownloadURLSession`). tvOS/macOS compile the catalog APIs but `enqueue` throws.
 
 ### Quality, tracks, playlist, live, FairPlay
 
@@ -302,20 +302,31 @@ await session.load(MediaSource(url: vod, adCues: [AdCue(start: 30, duration: 15)
 
 ---
 
-## Demo app
+## Demo apps
 
-Interactive iOS demo — tabs: **Play · Subs · Feed · Pro · Offline**.
+### iOS — Play · Subs · Feed · Pro · Offline
 
 ```bash
 cd Examples/PulsePlayerDemo
-xcodegen generate    # if needed
+xcodegen generate
 open PulsePlayerDemo.xcodeproj
-# Run on iPhone Simulator
 ```
 
-Use Apple’s HLS samples in the demo (progressive third-party MP4s often fail with network/policy errors on simulator).
-
 Details: [Examples/PulsePlayerDemo/README.md](Examples/PulsePlayerDemo/README.md)
+
+### tvOS — catalog + remote (0.9)
+
+```bash
+cd Examples/PulsePlayerTVDemo
+xcodegen generate
+open PulsePlayerTVDemo.xcodeproj
+# Destination: Apple TV Simulator
+```
+
+Focusable catalog, `onPlayPauseCommand`, quality hard lock, cinema chrome.  
+Details: [Examples/PulsePlayerTVDemo/README.md](Examples/PulsePlayerTVDemo/README.md)
+
+Use Apple’s HLS samples (third-party progressive MP4s often fail on simulator).
 
 ---
 
@@ -324,11 +335,14 @@ Details: [Examples/PulsePlayerDemo/README.md](Examples/PulsePlayerDemo/README.md
 ```bash
 swift test
 ./Scripts/check-line-count.sh   # fails if any .swift file > 400 lines
+./Scripts/generate-docc.sh ./docs   # DocC HTML (Xcode / docc)
 ```
 
-CI (GitHub Actions on `main`): `swift test` + line-count guard + iOS demo build.
+CI (GitHub Actions on `main`): `swift test` · line-count · **iOS demo** · **tvOS demo**.
 
-Full integration notes: [Documentation/INTEGRATION.md](Documentation/INTEGRATION.md)
+- Integration: [Documentation/INTEGRATION.md](Documentation/INTEGRATION.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- DocC catalog: `Sources/PulsePlayer/PulsePlayer.docc`
 
 ---
 
@@ -347,9 +361,7 @@ Honest scope for integrators evaluating the package:
 | Topic | Status |
 | --- | --- |
 | Native HLS interstitial ad parse | Host `AdCue` plugin only |
-| Dedicated tvOS sample app | API + chrome hooks; demo is iOS-first (0.9) |
-| DocC hosted site | Catalog scaffold in package; publish in 0.9 |
-| Real AV integration tests | Mock engine today; 1.0 |
+| Real AV integration tests | Mock engine today; planned 1.0 |
 | FairPlay end-to-end without Apple FPS package | Not possible publicly |
 
 ---

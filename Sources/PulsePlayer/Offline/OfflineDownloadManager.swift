@@ -1,7 +1,8 @@
 import AVFoundation
 import Foundation
 
-/// Downloads media for offline playback using `AVAssetDownloadURLSession` (iOS/tvOS).
+/// Downloads media for offline playback using `AVAssetDownloadURLSession` (**iOS only**).
+/// Catalog APIs compile on all platforms; enqueue is unsupported on tvOS/macOS.
 @MainActor
 public final class OfflineDownloadManager: NSObject {
     public static let shared = OfflineDownloadManager()
@@ -10,15 +11,17 @@ public final class OfflineDownloadManager: NSObject {
     public var onChange: (([OfflineDownloadItem]) -> Void)?
 
     let store: OfflineAssetStore
+    #if os(iOS)
     private var urlSession: AVAssetDownloadURLSession?
     private var tasks: [String: URLSessionTask] = [:]
+    #endif
     private let sessionIdentifier = "com.pulseplayer.offline.download"
 
     public init(store: OfflineAssetStore = .shared) {
         self.store = store
         super.init()
         self.items = store.all()
-        #if os(iOS) || os(tvOS)
+        #if os(iOS)
         let config = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
         config.isDiscretionary = false
         config.sessionSendsLaunchEvents = true
@@ -37,7 +40,7 @@ public final class OfflineDownloadManager: NSObject {
         id: String = UUID().uuidString,
         title: String? = nil
     ) throws -> OfflineDownloadItem {
-        #if os(iOS) || os(tvOS)
+        #if os(iOS)
         if let existing = store.item(id: id),
            existing.state == .downloading || existing.state == .completed
         {
@@ -80,13 +83,18 @@ public final class OfflineDownloadManager: NSObject {
         task.resume()
         return item
         #else
-        throw PlayerError.unknown("Offline downloads require iOS/tvOS", recoverable: false)
+        throw PlayerError.unknown(
+            "Offline asset downloads require iOS (AVAssetDownloadURLSession)",
+            recoverable: false
+        )
         #endif
     }
 
     public func cancel(id: String) {
+        #if os(iOS)
         tasks[id]?.cancel()
         tasks[id] = nil
+        #endif
         updateItem(id: id) { item in
             item.state = .cancelled
         }
@@ -123,7 +131,7 @@ public final class OfflineDownloadManager: NSObject {
     }
 }
 
-#if os(iOS) || os(tvOS)
+#if os(iOS)
 extension OfflineDownloadManager: AVAssetDownloadDelegate {
     public nonisolated func urlSession(
         _ session: URLSession,

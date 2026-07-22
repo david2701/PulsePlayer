@@ -1,42 +1,42 @@
-# PulsePlayer tvOS Demo (0.9)
+# PulsePlayerTVDemo
 
-Scaffold for a living-room sample app.
+Living-room sample for **tvOS 17+** using local PulsePlayer.
 
-## Status
+## Features
 
-- Package already compiles for **tvOS 17+**
-- API helpers: `PulsePlayerTVCommands`, `PulsePlayerTVControls`
-- Full XcodeGen target + focus polish ships in **0.9.0**
+- Horizontal catalog with focus rings (Siri Remote)
+- Full-screen player + `onPlayPauseCommand`
+- Focusable transport (`PulsePlayerTVControls`)
+- Quality menu (hard lock when variants are known)
+- Cinema theme, content-first layout
 
-## Planned layout
+## Run
 
-```text
-Examples/PulsePlayerTVDemo/
-  project.yml
-  PulsePlayerTVDemo/
-    App.swift
-    RootView.swift   // focusable transport + full chrome
+```bash
+cd Examples/PulsePlayerTVDemo
+xcodegen generate
+open PulsePlayerTVDemo.xcodeproj
+# Destination: Apple TV Simulator
 ```
 
-Until 0.9, use the iOS demo (`Examples/PulsePlayerDemo`) and exercise tvOS via SPM dependency in a blank tvOS app:
+Or:
 
-```swift
-import PulsePlayer
-
-struct ContentView: View {
-    @State private var session = PlayerSession(
-        configuration: PlayerConfiguration(autoplay: true)
-    )
-
-    var body: some View {
-        PulsePlayerView(session: session, chrome: .full, theme: .cinema)
-            .task {
-                await session.load(MediaSource(
-                    url: URL(string: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8")!,
-                    title: "BipBop"
-                ))
-            }
-            .focusable()
-    }
-}
+```bash
+xcodegen generate
+xcodebuild \
+  -project PulsePlayerTVDemo.xcodeproj \
+  -scheme PulsePlayerTVDemo \
+  -destination 'platform=tvOS Simulator,name=Apple TV' \
+  build CODE_SIGNING_ALLOWED=NO
 ```
+
+## Remote
+
+| Input | Action |
+| --- | --- |
+| Play/Pause | Toggle playback |
+| Select on transport | Skip ±10s / play-pause |
+| Menu | System back / exit |
+| Focus + Select on catalog | Open stream |
+
+Needs network for Apple sample HLS.

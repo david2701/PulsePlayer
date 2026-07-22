@@ -5,7 +5,7 @@
 /// Library metadata.
 public enum PulsePlayerInfo {
     /// Semantic version string.
-    public static let version = "0.8.0"
+    public static let version = "0.9.0"
 
     /// Copyright holder.
     public static let author = "David Villegas"

@@ -17,13 +17,21 @@ extension PulsePlayerControls {
         .frame(height: 28)
     }
 
+    @ViewBuilder
     var scrubber: some View {
         let span = scrubSpan
         let base = scrubBase
         let absolute = isScrubbing ? scrubTime : session.playbackTime
         let value = min(max(0, absolute - base), span)
 
-        return Slider(
+        #if os(tvOS)
+        // SwiftUI `Slider` is unavailable on tvOS — show progress; seek via remote ±skip.
+        ProgressView(value: span > 0 ? value / span : 0)
+            .tint(accent)
+            .frame(maxWidth: .infinity)
+            .frame(height: 12)
+        #else
+        Slider(
             value: Binding(
                 get: { value },
                 set: { newRelative in
@@ -52,6 +60,7 @@ extension PulsePlayerControls {
             }
         )
         .tint(accent)
+        #endif
     }
 
     var scrubSpan: Double {
