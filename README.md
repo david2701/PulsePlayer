@@ -23,6 +23,8 @@ Focus: **stable lifecycle**, **typed state**, **QoE events**, **easy SPM integra
 | UI | Zero-chrome `PulsePlayerView` + `PulsePlayerViewController` |
 | System | Picture in Picture, Now Playing, audio session |
 | Feeds | `PlayerPool` — prewarm / rebalance for vertical lists |
+| Subtitles | External **SRT / WebVTT**, offset, SwiftUI overlay |
+| Offline | **HLS/progressive download** (iOS/tvOS) → play from local asset |
 
 ## Install
 
@@ -35,7 +37,7 @@ Focus: **stable lifecycle**, **typed state**, **QoE events**, **easy SPM integra
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.3.0")
+    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.4.0")
 ]
 ```
 
@@ -130,6 +132,38 @@ pool.shutdown()
 
 Snippets: `Examples/BasicPlayback`, `Examples/VerticalFeed`.
 
+## Subtitles (SRT / VTT)
+
+```swift
+try session.addSubtitle(
+    content: srtString,
+    id: "en",
+    languageCode: "en",
+    format: .srt
+)
+
+try await session.addSubtitle(from: subtitleURL, languageCode: "es", label: "Español")
+
+session.setSubtitleOffset(0.3)
+session.selectSubtitle(id: nil) // hide
+// session.currentSubtitleText updates during playback
+// PulsePlayerView shows subtitles by default
+```
+
+## Offline downloads (iOS / tvOS)
+
+```swift
+let manager = OfflineDownloadManager.shared
+_ = try manager.enqueue(sourceURL: hlsURL, id: "episode-1", title: "Episode 1")
+
+if let source = manager.playableSource(id: "episode-1") {
+    await session.load(source)
+    session.play()
+}
+```
+
+Not available on macOS. Use a device/simulator for real downloads.
+
 ## Requirements
 
 - Xcode with Swift 6.2+ toolchain
@@ -142,7 +176,7 @@ swift test
 
 ## Version
 
-`PulsePlayerInfo.version` → **0.3.0**
+`PulsePlayerInfo.version` → **0.4.0**
 
 ## License
 

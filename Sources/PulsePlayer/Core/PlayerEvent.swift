@@ -22,6 +22,7 @@ public enum PlayerEvent: Sendable, Equatable {
     case externalPlaybackActive(Bool)
     case pictureInPicture(PiPEvent)
     case seekCompleted(time: TimeInterval)
+    case subtitleTrackChanged(id: String?)
     case warning(String)
 }
 

@@ -147,6 +147,7 @@ extension PlayerSession {
         case .timeObserved(let t):
             emit(.position(t))
             refreshNowPlaying()
+            refreshSubtitles(at: t)
             // Headless first-frame fallback: time advanced while intending to play.
             if !didEmitFirstFrame, wantsPlaying, t > 0.05 {
                 emitFirstFrameIfNeeded()

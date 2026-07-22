@@ -18,6 +18,12 @@ public final class PlayerSession: Identifiable {
     public var duration: TimeInterval? { engine.duration() }
     public internal(set) var isExternalPlaybackActive: Bool = false
 
+    /// External subtitle tracks (SRT/VTT).
+    public internal(set) var subtitleTracks: [SubtitleTrack] = []
+    public internal(set) var activeSubtitleTrackID: String?
+    /// Current on-screen subtitle text.
+    public internal(set) var currentSubtitleText: String?
+
     let engine: any PlaybackControlling
     let dependencies: PlayerDependencies
     let eventBus = PlayerEventBus()

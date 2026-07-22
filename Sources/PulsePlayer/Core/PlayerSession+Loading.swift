@@ -62,6 +62,7 @@ extension PlayerSession {
         currentSource = nil
         didEmitFirstFrame = false
         retryAttemptsUsed = 0
+        clearSubtitles()
         engine.pause()
         // Replace with empty by tearing item via a dummy cancel — engine keeps player.
         // Full clear: tearDown not called so session reusable; load next source.
@@ -74,6 +75,7 @@ extension PlayerSession {
         loadGeneration &+= 1
         pipController.tearDown()
         clearNowPlaying()
+        clearSubtitles()
         if let np = dependencies.nowPlaying as? SystemNowPlayingCenter {
             np.setCommandHandlers(nil)
         }

@@ -4,19 +4,27 @@ import SwiftUI
 public struct PulsePlayerView: View {
     private let session: PlayerSession
     private let videoGravity: PlayerVideoGravity
+    private let showsSubtitles: Bool
 
     public init(
         session: PlayerSession,
-        videoGravity: PlayerVideoGravity = .resizeAspect
+        videoGravity: PlayerVideoGravity = .resizeAspect,
+        showsSubtitles: Bool = true
     ) {
         self.session = session
         self.videoGravity = videoGravity
+        self.showsSubtitles = showsSubtitles
     }
 
     public var body: some View {
         #if canImport(UIKit)
-        PlayerLayerRepresentable(session: session, videoGravity: videoGravity)
-            .accessibilityLabel(session.currentSource?.title ?? "Video")
+        ZStack {
+            PlayerLayerRepresentable(session: session, videoGravity: videoGravity)
+            if showsSubtitles {
+                PulseSubtitleOverlay(session: session)
+            }
+        }
+        .accessibilityLabel(session.currentSource?.title ?? "Video")
         #else
         Color.black
             .overlay {
