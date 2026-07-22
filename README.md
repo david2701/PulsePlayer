@@ -24,8 +24,6 @@ Focus: **stable lifecycle**, **typed state**, **QoE events**, **easy SPM integra
 | System | Picture in Picture, Now Playing, audio session |
 | Feeds | `PlayerPool` — prewarm / rebalance for vertical lists |
 
-**Not included (yet):** FairPlay, offline HLS downloads, subtitles, ad SDK.
-
 ## Install
 
 ### Xcode
