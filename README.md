@@ -352,4 +352,18 @@ Honest scope for integrators evaluating the package:
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+**MIT** — free to use, modify, and distribute (including commercially).
+
+Copyright © 2026 **David Villegas**. See [LICENSE](LICENSE).
+
+### Attribution
+
+You may use PulsePlayer in apps, SDKs, and products without paying royalties.
+You **must** keep the copyright notice and permission text from [LICENSE](LICENSE)
+in source distributions and substantial copies of the Software.
+
+When practical, please credit:
+
+> PulsePlayer by David Villegas — https://github.com/david2701/PulsePlayer
+
+Examples: app About screen, open-source credits list, or project README.

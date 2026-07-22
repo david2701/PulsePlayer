@@ -34,4 +34,9 @@ struct PlatformHooksTests {
     @Test func versionIs072() {
         #expect(PulsePlayerInfo.version == "0.7.2")
     }
+
+    @Test func attributionCreditsAuthor() {
+        #expect(PulsePlayerInfo.author == "David Villegas")
+        #expect(PulsePlayerInfo.attribution.contains("David Villegas"))
+    }
 }
