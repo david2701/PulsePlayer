@@ -183,10 +183,6 @@ extension PulsePlayerControls {
         .buttonStyle(.plain)
     }
 
-    var timePairLabel: String {
-        "\(timeLabel(displayTime)) / \(timeLabel(session.playbackDuration ?? 0))"
-    }
-
     var displayTime: TimeInterval { isScrubbing ? scrubTime : session.playbackTime }
 
     var muteIcon: String {
