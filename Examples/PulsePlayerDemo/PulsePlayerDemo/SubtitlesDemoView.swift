@@ -76,7 +76,7 @@ struct SubtitlesDemoView: View {
 
     private func bootstrap() async {
         await session.load(
-            DemoMedia.source(url: DemoMedia.bigBuckBunnyMP4, id: "bbb-subs", title: "BBB + SRT")
+            DemoMedia.source(url: DemoMedia.bipbopAdvanced, id: "subs", title: "BipBop + SRT")
         )
         do {
             let track = try session.addSubtitle(

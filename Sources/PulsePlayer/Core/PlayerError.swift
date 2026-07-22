@@ -1,3 +1,5 @@
+import Foundation
+
 /// Typed player errors with recoverability for host + auto-retry.
 public enum PlayerError: Error, Sendable, Equatable {
     case invalidSource(String)
@@ -22,4 +24,81 @@ public enum PlayerError: Error, Sendable, Equatable {
             return r
         }
     }
+
+    /// Short message for UI (not the raw enum dump).
+    public var userMessage: String {
+        switch self {
+        case .invalidSource(let reason):
+            return reason
+        case .assetLoadFailed(let underlying, _):
+            return friendlyNetworkOrAccess(underlying)
+        case .itemFailed(let domain, let code, let message, _):
+            return friendlyItemFailed(domain: domain, code: code, message: message)
+        case .startupTimedOut:
+            return "Playback took too long to start. Check the network and try again."
+        case .stalledExhausted(let attempts):
+            return "Playback stalled after \(attempts) retries."
+        case .networkUnavailable:
+            return "Network unavailable."
+        case .cancelled:
+            return "Cancelled."
+        case .sessionInvalidated:
+            return "Player session was closed."
+        case .unknown(let message, _):
+            return message
+        }
+    }
+}
+
+extension PlayerError: LocalizedError {
+    public var errorDescription: String? { userMessage }
+}
+
+private func friendlyItemFailed(domain: String, code: Int, message: String) -> String {
+    if domain == "NSURLErrorDomain" {
+        switch code {
+        case -1009:
+            return "No internet connection."
+        case -1001:
+            return "The request timed out."
+        case -1003, -1004:
+            return "Could not find the media server."
+        case -1102:
+            // NSURLErrorNoPermissionsToReadFile — also seen on blocked remote assets.
+            return "No permission to access this media (blocked URL, expired link, or restricted file)."
+        case -999:
+            return "Request cancelled."
+        default:
+            break
+        }
+    }
+    if domain == "AVFoundationErrorDomain" {
+        switch code {
+        case -11828, -11829:
+            return "Unsupported or corrupt media format."
+        case -11800:
+            return "Media playback failed."
+        default:
+            break
+        }
+    }
+    let clean = message.trimmingCharacters(in: .whitespacesAndNewlines)
+    if clean.isEmpty {
+        return "Playback failed (\(domain) \(code))."
+    }
+    return clean
+}
+
+private func friendlyNetworkOrAccess(_ message: String) -> String {
+    let lower = message.lowercased()
+    if lower.contains("permission") {
+        return "No permission to access this media."
+    }
+    if lower.contains("timed out") || lower.contains("timeout") {
+        return "The request timed out."
+    }
+    if lower.contains("offline") || lower.contains("internet") {
+        return "No internet connection."
+    }
+    return message
 }

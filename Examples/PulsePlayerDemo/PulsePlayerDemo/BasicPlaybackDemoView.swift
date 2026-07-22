@@ -72,19 +72,22 @@ struct BasicPlaybackDemoView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu("Source") {
-                        Button("BipBop HLS") {
-                            Task { await load(DemoMedia.bipbopHLS, "BipBop HLS") }
+                        Button("BipBop Advanced") {
+                            Task { await load(DemoMedia.bipbopAdvanced, "BipBop Advanced") }
                         }
-                        Button("Big Buck Bunny") {
-                            Task { await load(DemoMedia.bigBuckBunnyMP4, "Big Buck Bunny") }
+                        Button("BipBop 16:9") {
+                            Task { await load(DemoMedia.bipbop16x9, "BipBop 16:9") }
                         }
-                        Button("Elephants Dream") {
-                            Task { await load(DemoMedia.elephantsDreamMP4, "Elephants Dream") }
+                        Button("BipBop 4:3") {
+                            Task { await load(DemoMedia.bipbop4x3, "BipBop 4:3") }
+                        }
+                        Button("Advanced TS") {
+                            Task { await load(DemoMedia.advancedTS, "Advanced TS") }
                         }
                     }
                 }
             }
-            .task { await load(DemoMedia.bigBuckBunnyMP4, "Big Buck Bunny") }
+            .task { await load(DemoMedia.bipbopAdvanced, "BipBop Advanced") }
             .onDisappear { session.pause() }
         }
     }

@@ -67,21 +67,22 @@ public struct PulsePlayerView: View {
                 }
 
                 if session.status == .failed {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 10) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.title2)
                         Text("Playback failed")
                             .font(.subheadline.weight(.semibold))
-                        if let err = session.currentError {
-                            Text(String(describing: err))
-                                .font(.caption2)
-                                .multilineTextAlignment(.center)
-                                .opacity(0.7)
+                        Text(session.currentError?.userMessage ?? "Unknown error")
+                            .font(.caption)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.white.opacity(0.75))
+                            .padding(.horizontal, 20)
+                        if session.currentError?.isRecoverable == true {
+                            Button("Retry") {
+                                Task { await session.retry() }
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
-                        Button("Retry") {
-                            Task { await session.retry() }
-                        }
-                        .buttonStyle(.borderedProminent)
                     }
                     .foregroundStyle(.white)
                     .padding()
