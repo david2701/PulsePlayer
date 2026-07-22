@@ -3,7 +3,7 @@
 ## Install
 
 ```swift
-.package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.7.0")
+.package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.7.2")
 ```
 
 ## Minimal playback
