@@ -28,6 +28,13 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
     var lastObservedBps: Double?
     var lastEmittedTime: TimeInterval = -1
 
+    /// id → AVMediaSelectionOption for current item
+    var audioOptionById: [String: AVMediaSelectionOption] = [:]
+    var textOptionById: [String: AVMediaSelectionOption] = [:]
+    var fairPlayLoader: FairPlayContentKeyLoader?
+    var thumbnailGenerator = ThumbnailGenerator()
+    var contentKeyProvider: (any ContentKeyProviding)?
+
     init(player: AVPlayer = AVPlayer()) {
         self.avPlayer = player
         avPlayer.actionAtItemEnd = .pause
@@ -47,8 +54,21 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
         generation &+= 1
         let gen = generation
         tearDownItemObservers()
+        fairPlayLoader?.tearDown()
+        fairPlayLoader = nil
+        audioOptionById = [:]
+        textOptionById = [:]
+        thumbnailGenerator.clear()
 
         let asset = AssetFactory.makeURLAsset(from: source)
+
+        if let provider = contentKeyProvider {
+            let assetId = source.contentKeyAssetId ?? source.id
+            let loader = FairPlayContentKeyLoader(provider: provider, assetId: assetId)
+            loader.attach(to: asset)
+            fairPlayLoader = loader
+        }
+
         let item = AVPlayerItem(asset: asset)
         currentItem = item
         applyItemConfiguration(to: item)
@@ -61,6 +81,7 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
 
         installItemObservers(item: item, generation: gen)
         avPlayer.replaceCurrentItem(with: item)
+        thumbnailGenerator.prepare(asset: asset)
 
         // Kick asset readiness; KVO may also fire.
         do {
@@ -73,6 +94,7 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
                     message: "Asset not playable"
                 ))
             }
+            await refreshTrackMaps(asset: asset, item: item)
         } catch {
             guard gen == generation else { return }
             let ns = error as NSError
@@ -126,11 +148,119 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
         tearDownItemObservers()
         tearDownPlayerObservations()
         removeTimeObserver()
+        fairPlayLoader?.tearDown()
+        fairPlayLoader = nil
+        thumbnailGenerator.clear()
+        audioOptionById = [:]
+        textOptionById = [:]
         avPlayer.replaceCurrentItem(with: nil)
         currentItem = nil
         playerLayer?.player = nil
         playerLayer = nil
         onSignal = nil
+    }
+
+    func audioTracks() -> [MediaTrackInfo] {
+        buildTrackInfos(kind: .audio, map: audioOptionById)
+    }
+
+    func textTracks() -> [MediaTrackInfo] {
+        buildTrackInfos(kind: .text, map: textOptionById)
+    }
+
+    func selectAudioTrack(id: String?) {
+        select(optionId: id, map: audioOptionById, characteristic: .audible)
+    }
+
+    func selectTextTrack(id: String?) {
+        select(optionId: id, map: textOptionById, characteristic: .legible)
+    }
+
+    func setPreferredPeakBitRate(_ bps: Double) {
+        configuration.preferredPeakBitRate = bps
+        currentItem?.preferredPeakBitRate = bps
+    }
+
+    func setPreferredMaximumResolution(_ size: CGSize) {
+        configuration.preferredMaximumResolution = size
+        currentItem?.preferredMaximumResolution = size
+    }
+
+    func seekableTimeRange() -> ClosedRange<TimeInterval>? {
+        guard let range = currentItem?.seekableTimeRanges
+            .compactMap({ $0.timeRangeValue })
+            .max(by: { $0.duration.seconds < $1.duration.seconds })
+        else { return nil }
+        let start = range.start.seconds
+        let end = start + range.duration.seconds
+        guard start.isFinite, end.isFinite, end > start else { return nil }
+        return start...end
+    }
+
+    func prepareThumbnailGenerator() {
+        if let asset = currentItem?.asset {
+            thumbnailGenerator.prepare(asset: asset)
+        }
+    }
+
+    func thumbnail(at time: TimeInterval) async -> CGImage? {
+        await thumbnailGenerator.image(at: time)
+    }
+
+    private func buildTrackInfos(
+        kind: MediaTrackKind,
+        map: [String: AVMediaSelectionOption]
+    ) -> [MediaTrackInfo] {
+        guard let item = currentItem,
+              let group = item.asset.mediaSelectionGroup(
+                forMediaCharacteristic: kind == .audio ? .audible : .legible
+              )
+        else { return [] }
+        let selected = item.currentMediaSelection.selectedMediaOption(in: group)
+        return map.map { id, option in
+            MediaTrackInfo(
+                id: id,
+                kind: kind,
+                displayName: option.displayName,
+                languageCode: option.extendedLanguageTag,
+                isExternal: false,
+                isSelected: option == selected
+            )
+        }
+        .sorted { $0.displayName < $1.displayName }
+    }
+
+    private func select(
+        optionId: String?,
+        map: [String: AVMediaSelectionOption],
+        characteristic: AVMediaCharacteristic
+    ) {
+        guard let item = currentItem,
+              let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: characteristic)
+        else { return }
+        if let optionId, let option = map[optionId] {
+            item.select(option, in: group)
+        } else {
+            item.select(nil, in: group)
+        }
+    }
+
+    private func refreshTrackMaps(asset: AVURLAsset, item: AVPlayerItem) async {
+        audioOptionById = [:]
+        textOptionById = [:]
+        if let audioGroup = asset.mediaSelectionGroup(forMediaCharacteristic: .audible) {
+            for (idx, option) in audioGroup.options.enumerated() {
+                let id = "audio-\(option.extendedLanguageTag ?? option.displayName)-\(idx)"
+                audioOptionById[id] = option
+            }
+        }
+        if let textGroup = asset.mediaSelectionGroup(forMediaCharacteristic: .legible) {
+            for (idx, option) in textGroup.options.enumerated() {
+                let id = "text-\(option.extendedLanguageTag ?? option.displayName)-\(idx)"
+                textOptionById[id] = option
+            }
+        }
+        _ = item
     }
 
     func attachPlayerLayer(_ layer: AVPlayerLayer?) {

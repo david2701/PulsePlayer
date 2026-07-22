@@ -5,20 +5,31 @@ public struct PulsePlayerControls: View {
     private let session: PlayerSession
     private let mode: PlayerChromeMode
     private let accent: Color
+    private let showsAirPlay: Bool
+    private let showsQuality: Bool
+    private let onFullscreen: (() -> Void)?
 
     @State private var isScrubbing = false
     @State private var scrubTime: TimeInterval = 0
     @State private var controlsVisible = true
     @State private var hideTask: Task<Void, Never>?
+    @State private var showTracks = false
+    @State private var showQuality = false
 
     public init(
         session: PlayerSession,
         mode: PlayerChromeMode = .full,
-        accent: Color = .white
+        accent: Color = .white,
+        showsAirPlay: Bool = true,
+        showsQuality: Bool = true,
+        onFullscreen: (() -> Void)? = nil
     ) {
         self.session = session
         self.mode = mode
         self.accent = accent
+        self.showsAirPlay = showsAirPlay
+        self.showsQuality = showsQuality
+        self.onFullscreen = onFullscreen
     }
 
     public var body: some View {
@@ -35,14 +46,21 @@ public struct PulsePlayerControls: View {
             }
         }
         .foregroundStyle(accent)
+        .sheet(isPresented: $showTracks) {
+            TrackPickerSheet(session: session)
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showQuality) {
+            QualityPickerSheet(session: session)
+                .presentationDetents([.medium])
+        }
     }
-
-    // MARK: - Minimal (feed)
 
     private var minimalChrome: some View {
         ZStack {
             Color.clear
                 .contentShape(Rectangle())
+                .onTapGesture(count: 2) { handleDoubleTap() }
                 .onTapGesture { session.togglePlayPause() }
 
             if !session.isPlaying {
@@ -56,10 +74,13 @@ public struct PulsePlayerControls: View {
             VStack {
                 Spacer()
                 HStack {
-                    Spacer()
-                    Button {
-                        session.toggleMute()
-                    } label: {
+                    if session.currentSource?.isLive == true {
+                        liveBadge
+                        Spacer()
+                    } else {
+                        Spacer()
+                    }
+                    Button { session.toggleMute() } label: {
                         Image(systemName: muteIcon)
                             .font(.body.weight(.semibold))
                             .padding(12)
@@ -71,15 +92,18 @@ public struct PulsePlayerControls: View {
         }
     }
 
-    // MARK: - Interactive shells
-
     private func interactiveChrome<Bar: View>(@ViewBuilder bar: @escaping () -> Bar) -> some View {
         ZStack {
             Color.clear
                 .contentShape(Rectangle())
+                .onTapGesture(count: 2) { handleDoubleTap() }
                 .onTapGesture { toggleChrome() }
 
             VStack(spacing: 0) {
+                if let image = session.scrubPreviewImage, isScrubbing {
+                    scrubPreview(image)
+                        .padding(.bottom, 8)
+                }
                 Spacer()
                 if controlsVisible {
                     bar()
@@ -95,14 +119,15 @@ public struct PulsePlayerControls: View {
     }
 
     private var liteBar: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
+            bufferBar
             scrubber
             HStack(spacing: 14) {
                 playButton
                 Text(timePairLabel)
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.9))
                 Spacer()
+                bitrateLabel
                 Button { session.toggleMute(); bumpChrome() } label: {
                     Image(systemName: muteIcon)
                 }
@@ -114,15 +139,46 @@ public struct PulsePlayerControls: View {
     }
 
     private var fullBar: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
+            bufferBar
             scrubber
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 playButton
                 skipButton(-10, system: "gobackward.10")
                 skipButton(10, system: "goforward.10")
                 Text(timePairLabel)
                     .font(.caption.monospacedDigit())
                 Spacer(minLength: 4)
+                bitrateLabel
+                if session.currentSource?.isLive == true {
+                    Button("LIVE") {
+                        Task { await session.seekToLiveEdge() }
+                        bumpChrome()
+                    }
+                    .font(.caption2.weight(.bold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(session.isAtLiveEdge ? Color.red : Color.white.opacity(0.2), in: Capsule())
+                }
+                Button { showTracks = true; bumpChrome() } label: {
+                    Image(systemName: "text.bubble")
+                }
+                if showsQuality, !session.availableQualities.isEmpty {
+                    Button { showQuality = true; bumpChrome() } label: {
+                        Image(systemName: "rectangle.connected.to.line.below")
+                    }
+                }
+                #if canImport(UIKit)
+                if showsAirPlay {
+                    AirPlayRoutePicker()
+                        .frame(width: 28, height: 28)
+                }
+                #endif
+                if let onFullscreen {
+                    Button { onFullscreen(); bumpChrome() } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    }
+                }
                 Button { session.toggleMute(); bumpChrome() } label: {
                     Image(systemName: muteIcon)
                 }
@@ -133,13 +189,26 @@ public struct PulsePlayerControls: View {
                     ),
                     in: 0...1
                 )
-                .frame(maxWidth: 100)
+                .frame(maxWidth: 90)
                 .tint(accent)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(barBackground)
+    }
+
+    private var bufferBar: some View {
+        GeometryReader { geo in
+            let p = max(0, min(1, session.bufferProgressValue ?? 0))
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.white.opacity(0.12))
+                Capsule()
+                    .fill(Color.white.opacity(0.28))
+                    .frame(width: geo.size.width * p)
+            }
+        }
+        .frame(height: 3)
     }
 
     private var playButton: some View {
@@ -164,18 +233,36 @@ public struct PulsePlayerControls: View {
     }
 
     private var scrubber: some View {
-        let duration = max(session.playbackDuration ?? 0, 0.001)
-        let value = isScrubbing ? scrubTime : session.playbackTime
+        let duration: Double = {
+            if session.currentSource?.isLive == true,
+               let range = session.seekableTimeRange
+            {
+                return max(range.upperBound - range.lowerBound, 0.001)
+            }
+            return max(session.playbackDuration ?? 0, 0.001)
+        }()
+        let base: Double = {
+            if session.currentSource?.isLive == true,
+               let range = session.seekableTimeRange
+            {
+                return range.lowerBound
+            }
+            return 0
+        }()
+        let absolute = isScrubbing ? scrubTime : session.playbackTime
+        let value = min(max(0, absolute - base), duration)
+
         return Slider(
             value: Binding(
-                get: { min(max(0, value), duration) },
-                set: { newValue in
+                get: { value },
+                set: { newRelative in
+                    let absTime = base + newRelative
                     if !isScrubbing {
                         isScrubbing = true
                         session.beginScrub()
                     }
-                    scrubTime = newValue
-                    session.updateScrub(time: newValue)
+                    scrubTime = absTime
+                    session.updateScrub(time: absTime)
                     bumpChrome()
                 }
             ),
@@ -196,9 +283,42 @@ public struct PulsePlayerControls: View {
         .tint(accent)
     }
 
+    @ViewBuilder
+    private func scrubPreview(_ image: CGImage) -> some View {
+        #if canImport(UIKit)
+        Image(decorative: image, scale: 1, orientation: .up)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 160, height: 90)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.3)))
+        #endif
+    }
+
+    private var liveBadge: some View {
+        Text("LIVE")
+            .font(.caption2.weight(.bold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.red, in: Capsule())
+            .padding(16)
+    }
+
+    private var bitrateLabel: some View {
+        Group {
+            if let bps = session.indicatedBitrate ?? session.observedBitrate, bps > 0 {
+                Text(bps >= 1_000_000
+                     ? String(format: "%.1fM", bps / 1_000_000)
+                     : String(format: "%.0fk", bps / 1000))
+                    .font(.caption2.monospacedDigit())
+                    .opacity(0.75)
+            }
+        }
+    }
+
     private var barBackground: some View {
         LinearGradient(
-            colors: [.clear, .black.opacity(0.82)],
+            colors: [.clear, .black.opacity(0.85)],
             startPoint: .top,
             endPoint: .bottom
         )
@@ -216,6 +336,11 @@ public struct PulsePlayerControls: View {
         if session.isMuted || session.volume < 0.01 { return "speaker.slash.fill" }
         if session.volume < 0.45 { return "speaker.wave.1.fill" }
         return "speaker.wave.2.fill"
+    }
+
+    private func handleDoubleTap() {
+        // Approximate: double-tap seeks +10s (host can place side zones later).
+        Task { await session.seek(relative: 10) }
     }
 
     private func toggleChrome() {

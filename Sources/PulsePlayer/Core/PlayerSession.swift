@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreGraphics
 import Foundation
 import Observation
 
@@ -44,10 +45,30 @@ public final class PlayerSession: Identifiable {
     /// Master switch for external subtitles.
     public var subtitlesEnabled: Bool = true
 
+    /// QoE snapshots (updated from access log / buffer signals).
+    public internal(set) var indicatedBitrate: Double?
+    public internal(set) var observedBitrate: Double?
+    public internal(set) var bufferProgressValue: Double?
+    /// Scrub preview frame (optional).
+    public internal(set) var scrubPreviewImage: CGImage?
+    /// HLS quality ladder (empty if unknown / progressive).
+    public internal(set) var availableQualities: [StreamQuality] = []
+    /// Selected quality id (`auto` or variant id).
+    public internal(set) var selectedQualityId: String = StreamQuality.auto.id
+
+    /// Optional queue for playlist autoplay-next.
+    public weak var playbackQueue: PlaybackQueue?
+    /// Optional ad cue handler.
+    public weak var adCueHandler: (any AdCueHandling)?
+    /// Persist position on pause/end.
+    public var continueWatchingEnabled: Bool = true
+    public var continueStore: ContinueWatchingStore = .shared
+
     let engine: any PlaybackControlling
     let dependencies: PlayerDependencies
     let eventBus = PlayerEventBus()
     let pipController = PictureInPictureController()
+    let adCueTracker = AdCueTracker()
 
     var loadGeneration: UInt64 = 0
     var wantsPlaying = false
@@ -61,6 +82,8 @@ public final class PlayerSession: Identifiable {
     var autoRetryTask: Task<Void, Never>?
     var loadTask: Task<Void, Never>?
     var platformConfigured = false
+    var _contentKeyProvider: (any ContentKeyProviding)?
+    var thumbnailTask: Task<Void, Never>?
 
     public init(
         configuration: PlayerConfiguration = .default,
@@ -77,6 +100,7 @@ public final class PlayerSession: Identifiable {
         self.engine.onSignal = { [weak self] signal in
             self?.handleEngineSignal(signal)
         }
+        self.adCueTracker.session = self
         // Platform hooks (PiP events, remote commands) after `self` is ready.
         self.configurePlatformHooks()
         self.platformConfigured = true

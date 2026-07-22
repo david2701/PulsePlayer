@@ -3,5 +3,5 @@
 
 /// Library version string.
 public enum PulsePlayerInfo {
-    public static let version = "0.5.0"
+    public static let version = "0.6.0"
 }

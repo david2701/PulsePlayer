@@ -13,6 +13,12 @@ public struct MediaSource: Sendable, Equatable, Identifiable {
     public var posterURL: URL?
     public var title: String?
     public var subtitle: String?
+    /// FairPlay content id (host-defined). Used with `ContentKeyProviding`.
+    public var contentKeyAssetId: String?
+    /// Optional mid-roll / custom ad markers (host-driven plugin).
+    public var adCues: [AdCue]
+    /// Optional DVR window hint in seconds (live). `nil` = use seekable range from engine.
+    public var dvrWindow: TimeInterval?
 
     public init(
         id: String = UUID().uuidString,
@@ -23,7 +29,10 @@ public struct MediaSource: Sendable, Equatable, Identifiable {
         preferredForwardBufferDuration: TimeInterval? = nil,
         posterURL: URL? = nil,
         title: String? = nil,
-        subtitle: String? = nil
+        subtitle: String? = nil,
+        contentKeyAssetId: String? = nil,
+        adCues: [AdCue] = [],
+        dvrWindow: TimeInterval? = nil
     ) {
         self.id = id
         self.url = url
@@ -34,5 +43,8 @@ public struct MediaSource: Sendable, Equatable, Identifiable {
         self.posterURL = posterURL
         self.title = title
         self.subtitle = subtitle
+        self.contentKeyAssetId = contentKeyAssetId
+        self.adCues = adCues
+        self.dvrWindow = dvrWindow
     }
 }

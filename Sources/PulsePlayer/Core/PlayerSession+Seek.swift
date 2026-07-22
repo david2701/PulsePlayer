@@ -5,9 +5,9 @@ extension PlayerSession {
     /// Seek to absolute media time (seconds). Updates `playbackTime` immediately for UI.
     public func seek(to time: TimeInterval) async {
         guard status != .invalidated, status != .idle else { return }
-        // Allow scrub while loading finishes; clamp when duration known.
         let upper = playbackDuration ?? engine.duration() ?? .greatestFiniteMagnitude
-        let target = min(max(0, time), max(0, upper))
+        var target = min(max(0, time), max(0, upper))
+        target = clampLiveSeek(target)
         isSeeking = true
         playbackTime = target
         defer { isSeeking = false }
@@ -41,11 +41,20 @@ extension PlayerSession {
 
     public func updateScrub(time: TimeInterval) {
         isSeeking = true
-        playbackTime = max(0, time)
+        playbackTime = clampLiveSeek(max(0, time))
         refreshSubtitles(at: playbackTime)
+        thumbnailTask?.cancel()
+        let t = playbackTime
+        thumbnailTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .milliseconds(80))
+            guard !Task.isCancelled else { return }
+            self.scrubPreviewImage = await self.engine.thumbnail(at: t)
+        }
     }
 
     public func endScrub(commit time: TimeInterval) async {
+        scrubPreviewImage = nil
         await seek(to: time)
     }
 }

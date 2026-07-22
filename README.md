@@ -19,13 +19,19 @@ Focus: **stable lifecycle**, **typed state**, **QoE events**, **easy SPM integra
 | State | Public state machine + recoverable `PlayerError` |
 | Auth media | HTTP headers / cookies on the **initial** asset request |
 | Resilience | Stall recovery, startup timeout, retry policy |
-| Observability | `makeEventStream()` (first frame, rebuffer, bitrate, …) |
-| UI | Zero-chrome `PulsePlayerView` + `PulsePlayerViewController` |
-| System | Picture in Picture, Now Playing, audio session |
-| Feeds | `PlayerPool` — prewarm / rebalance for vertical lists |
-| Subtitles | External **SRT / WebVTT**, offset, style, enable/disable, overlay |
-| Controls | Chrome modes: **`none` / `minimal` / `lite` / `full`** |
-| Offline | **HLS/progressive download** (iOS/tvOS) → play from local asset |
+| Observability | Events + TTFF/bitrate/buffer snapshots |
+| UI | `PulsePlayerView` + chrome modes + fullscreen + AirPlay picker |
+| Tracks | Audio / text (HLS embedded + external) picker |
+| Quality | HLS ladder parse + Auto / manual peak bitrate |
+| System | PiP, Now Playing, audio session, AirPlay |
+| Feeds | `PlayerPool` prewarm / rebalance |
+| Subtitles | SRT/VTT external + style |
+| Thumbnails | Scrub preview via `AVAssetImageGenerator` |
+| DRM | FairPlay hook (`ContentKeyProviding`) |
+| Offline | Download + retry + storage limit (iOS/tvOS) |
+| Playlist | `PlaybackQueue` + continue watching |
+| Live | Seekable DVR window + seek to live edge |
+| Ads | `AdCue` markers + `AdCueHandling` plugin |
 
 ## Install
 
@@ -38,7 +44,7 @@ Focus: **stable lifecycle**, **typed state**, **QoE events**, **easy SPM integra
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.5.0")
+    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.6.0")
 ]
 ```
 
@@ -205,7 +211,40 @@ swift test
 
 ## Version
 
-`PulsePlayerInfo.version` → **0.5.0**
+`PulsePlayerInfo.version` → **0.6.0**
+
+## Advanced (0.6)
+
+```swift
+// Quality
+session.setQualityAuto()
+session.setQuality(session.availableQualities[0])
+
+// Tracks
+session.selectAudioTrack(id: …)
+session.selectTextTrack(id: …) // embedded or "ext-\(subtitleId)"
+
+// FairPlay
+session.contentKeyProvider = MyKeyServer()
+await session.load(MediaSource(url: drmURL, contentKeyAssetId: "asset-1"))
+
+// Playlist
+let queue = PlaybackQueue(items: episodes)
+queue.session = session
+session.playbackQueue = queue
+await queue.play(at: 0)
+
+// Live
+await session.seekToLiveEdge()
+
+// Ads (host plugin)
+session.adCueHandler = self
+await session.load(MediaSource(url: vod, adCues: [AdCue(start: 30, duration: 15)]))
+
+// Offline v2
+try OfflineDownloadManager.shared.retry(id: "ep1")
+try OfflineDownloadManager.shared.enforceStorageLimit()
+```
 
 ## License
 

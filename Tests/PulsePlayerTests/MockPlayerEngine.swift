@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 @testable import PulsePlayer
 
@@ -17,6 +18,11 @@ final class MockPlayerEngine: PlaybackControlling {
     private(set) var replaceCount = 0
     var replaceError: Error?
     var autoReady = true
+    var peakBitRate: Double = 0
+    var maxResolution: CGSize = .zero
+    var mockAudio: [MediaTrackInfo] = []
+    var mockText: [MediaTrackInfo] = []
+    var seekable: ClosedRange<TimeInterval>? = 0...120
 
     func applyConfiguration(_ config: PlayerConfiguration) {
         configuration = config
@@ -51,20 +57,10 @@ final class MockPlayerEngine: PlaybackControlling {
         _currentTime = time
     }
 
-    func setRate(_ rate: Float) {
-        self.rate = rate
-    }
-
-    func setMuted(_ muted: Bool) {
-        self.muted = muted
-    }
-
-    func setVolume(_ volume: Float) {
-        self.volume = volume
-    }
-
+    func setRate(_ rate: Float) { self.rate = rate }
+    func setMuted(_ muted: Bool) { self.muted = muted }
+    func setVolume(_ volume: Float) { self.volume = volume }
     func currentTime() -> TimeInterval { _currentTime }
-
     func duration() -> TimeInterval? { _duration }
 
     func tearDown() {
@@ -73,14 +69,42 @@ final class MockPlayerEngine: PlaybackControlling {
         onSignal = nil
     }
 
-    func emit(_ signal: PlayerEngineSignal) {
-        onSignal?(signal)
+    func audioTracks() -> [MediaTrackInfo] { mockAudio }
+    func textTracks() -> [MediaTrackInfo] { mockText }
+    func selectAudioTrack(id: String?) {
+        mockAudio = mockAudio.map {
+            MediaTrackInfo(
+                id: $0.id,
+                kind: $0.kind,
+                displayName: $0.displayName,
+                languageCode: $0.languageCode,
+                isExternal: $0.isExternal,
+                isSelected: $0.id == id
+            )
+        }
     }
 
-    func setDuration(_ value: TimeInterval?) {
-        _duration = value
+    func selectTextTrack(id: String?) {
+        mockText = mockText.map {
+            MediaTrackInfo(
+                id: $0.id,
+                kind: $0.kind,
+                displayName: $0.displayName,
+                languageCode: $0.languageCode,
+                isExternal: $0.isExternal,
+                isSelected: $0.id == id
+            )
+        }
     }
 
+    func setPreferredPeakBitRate(_ bps: Double) { peakBitRate = bps }
+    func setPreferredMaximumResolution(_ size: CGSize) { maxResolution = size }
+    func seekableTimeRange() -> ClosedRange<TimeInterval>? { seekable }
+    func prepareThumbnailGenerator() {}
+    func thumbnail(at time: TimeInterval) async -> CGImage? { nil }
+
+    func emit(_ signal: PlayerEngineSignal) { onSignal?(signal) }
+    func setDuration(_ value: TimeInterval?) { _duration = value }
     func advanceTime(to value: TimeInterval) {
         _currentTime = value
         onSignal?(.timeObserved(value))

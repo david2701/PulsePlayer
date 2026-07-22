@@ -39,6 +39,7 @@ extension PlayerSession {
         if apply(.pause) != nil {
             emit(.playbackPaused)
             refreshNowPlaying(rate: 0)
+            saveContinueWatchingIfNeeded()
         }
     }
 
@@ -126,6 +127,10 @@ extension PlayerSession {
             } else if apply(.didPlayToEnd) != nil {
                 wantsPlaying = false
                 emit(.ended)
+                saveContinueWatchingIfNeeded()
+                if let queue = playbackQueue {
+                    Task { await queue.handleSessionEnded() }
+                }
             }
 
         case .timeControlPlaying:
@@ -148,6 +153,8 @@ extension PlayerSession {
             emitFirstFrameIfNeeded()
 
         case .accessLog(let indicated, let observed):
+            indicatedBitrate = indicated
+            observedBitrate = observed
             emit(.bitrateChanged(indicatedBps: indicated, observedBps: observed))
 
         case .externalPlayback(let active):
@@ -160,7 +167,12 @@ extension PlayerSession {
             }
             emit(.position(t))
             refreshNowPlaying()
-            refreshSubtitles(at: isSeeking ? playbackTime : t)
+            let mediaTime = isSeeking ? playbackTime : t
+            refreshSubtitles(at: mediaTime)
+            adCueTracker.tick(time: mediaTime)
+            if currentSource?.isLive == true, isAtLiveEdge {
+                emit(.liveEdgeReached)
+            }
             // Headless first-frame fallback: time advanced while intending to play.
             if !didEmitFirstFrame, wantsPlaying, t > 0.05 {
                 emitFirstFrameIfNeeded()
@@ -171,6 +183,7 @@ extension PlayerSession {
             emit(.duration(d))
 
         case .bufferProgress(let p):
+            bufferProgressValue = p
             emit(.buffer(progress: p))
         }
     }
@@ -181,6 +194,26 @@ extension PlayerSession {
         let start = loadStartedAt ?? dependencies.clock.now()
         let elapsed = start.duration(to: dependencies.clock.now())
         emit(.firstFrame(elapsed: elapsed))
+        let ttffMs = Double(elapsed.components.seconds) * 1000
+            + Double(elapsed.components.attoseconds) / 1e15
+        emit(.metrics(
+            ttffMs: ttffMs,
+            rebufferCount: nil,
+            indicatedBps: indicatedBitrate,
+            observedBps: observedBitrate
+        ))
+    }
+
+    func saveContinueWatchingIfNeeded() {
+        guard continueWatchingEnabled,
+              let source = currentSource,
+              !source.isLive
+        else { return }
+        continueStore.save(
+            sourceId: source.id,
+            position: playbackTime,
+            duration: playbackDuration
+        )
     }
 
     func startStallWatchdog() {

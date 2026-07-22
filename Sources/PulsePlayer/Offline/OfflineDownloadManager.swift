@@ -9,7 +9,7 @@ public final class OfflineDownloadManager: NSObject {
     public private(set) var items: [OfflineDownloadItem] = []
     public var onChange: (([OfflineDownloadItem]) -> Void)?
 
-    private let store: OfflineAssetStore
+    let store: OfflineAssetStore
     private var urlSession: AVAssetDownloadURLSession?
     private var tasks: [String: URLSessionTask] = [:]
     private let sessionIdentifier = "com.pulseplayer.offline.download"
@@ -109,12 +109,12 @@ public final class OfflineDownloadManager: NSObject {
         store.item(id: id)?.mediaSource()
     }
 
-    fileprivate func refreshItems() {
+    func refreshItems() {
         items = store.all()
         onChange?(items)
     }
 
-    fileprivate func updateItem(id: String, mutate: (inout OfflineDownloadItem) -> Void) {
+    func updateItem(id: String, mutate: (inout OfflineDownloadItem) -> Void) {
         guard var item = store.item(id: id) else { return }
         mutate(&item)
         item.updatedAt = Date()
@@ -161,6 +161,7 @@ extension OfflineDownloadManager: AVAssetDownloadDelegate {
                 item.state = .completed
                 item.errorMessage = nil
             }
+            try? self.enforceStorageLimit()
         }
     }
 

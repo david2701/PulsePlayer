@@ -23,6 +23,13 @@ public enum PlayerEvent: Sendable, Equatable {
     case pictureInPicture(PiPEvent)
     case seekCompleted(time: TimeInterval)
     case subtitleTrackChanged(id: String?)
+    case audioTrackChanged(id: String?)
+    case textTrackChanged(id: String?)
+    case qualityChanged(id: String)
+    case qualitiesUpdated(count: Int)
+    case adCueReached(id: String)
+    case liveEdgeReached
+    case metrics(ttffMs: Double?, rebufferCount: Int?, indicatedBps: Double?, observedBps: Double?)
     case warning(String)
 }
 

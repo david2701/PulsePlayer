@@ -20,6 +20,12 @@ extension PlayerSession {
         _ = apply(.load, isLive: source.isLive)
         currentSource = source
         emit(.loadStarted(sourceID: source.id))
+        adCueTracker.handler = adCueHandler
+        adCueTracker.reset(cues: source.adCues)
+        scrubPreviewImage = nil
+        indicatedBitrate = nil
+        observedBitrate = nil
+        bufferProgressValue = nil
 
         startStartupWatchdog(generation: gen)
 
@@ -28,6 +34,7 @@ extension PlayerSession {
             do {
                 try await self.engine.replaceCurrentItem(with: source)
                 guard gen == self.loadGeneration, !Task.isCancelled else { return }
+                await self.refreshQualities(for: source)
             } catch is CancellationError {
                 return
             } catch {
@@ -41,7 +48,6 @@ extension PlayerSession {
                     code: ns.code,
                     message: ns.localizedDescription
                 )
-                // Map to assetLoadFailed when appropriate
                 let mapped: PlayerError = .assetLoadFailed(
                     underlying: URLSanitizer.sanitizeMessage(ns.localizedDescription),
                     recoverable: pe.isRecoverable
