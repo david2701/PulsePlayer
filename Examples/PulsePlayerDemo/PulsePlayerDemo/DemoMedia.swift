@@ -1,11 +1,13 @@
 import Foundation
 import PulsePlayer
 
-/// Demo sources — **Apple-hosted HLS only**.
-/// Google sample MP4s often fail on simulator with NSURLError -1102
-/// ("no permission to access the requested resource").
+/// Demo sources — Apple HLS streams verified to load on iOS Simulator.
+///
+/// Avoid:
+/// - Google sample MP4s → often `NSURLError -1102`
+/// - `advanced_stream_ts` → often `CoreMediaErrorDomain -16044` on simulator
 enum DemoMedia {
-    /// Advanced fMP4 HLS (primary).
+    /// Advanced fMP4 HLS (primary, most reliable).
     static let bipbopAdvanced = URL(string:
         "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8"
     )!
@@ -20,19 +22,24 @@ enum DemoMedia {
         "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8"
     )!
 
-    /// TS advanced stream.
-    static let advancedTS = URL(string:
-        "https://devstreaming-cdn.apple.com/videos/streaming/examples/advanced_stream_ts/master.m3u8"
+    /// HEVC advanced example (device preferred; may fall back gracefully).
+    static let bipbopHEVC = URL(string:
+        "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8"
     )!
 
-    /// Aliases used by demo screens.
+    /// Legacy basic stream (very compatible).
+    static let bipbopBasic = URL(string:
+        "https://devstreaming-cdn.apple.com/videos/streaming/examples/basic-stream-osx-ios5.0/master.m3u8"
+    )!
+
+    /// Alias used by offline / shared demos.
     static let bipbopHLS = bipbopAdvanced
 
     static let feedItems: [FeedItem] = [
         FeedItem(id: "adv", url: bipbopAdvanced, title: "BipBop Advanced"),
         FeedItem(id: "16x9", url: bipbop16x9, title: "BipBop 16:9"),
         FeedItem(id: "4x3", url: bipbop4x3, title: "BipBop 4:3"),
-        FeedItem(id: "ts", url: advancedTS, title: "Advanced TS"),
+        FeedItem(id: "basic", url: bipbopBasic, title: "BipBop Basic"),
     ]
 
     /// Dense SRT so cues stay visible while scrubbing demos.

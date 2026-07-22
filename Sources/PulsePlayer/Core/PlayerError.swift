@@ -72,6 +72,19 @@ private func friendlyItemFailed(domain: String, code: Int, message: String) -> S
             break
         }
     }
+    if domain == "CoreMediaErrorDomain" {
+        switch code {
+        case -16044, -16045, -16046:
+            // Common HLS playlist / segment open failures on sim or bad manifests.
+            return "Could not open this HLS stream (playlist or segment error). Try another source."
+        case -12880, -12881:
+            return "HLS playlist parse failed."
+        case -12642, -12643, -12645:
+            return "HLS media segment error."
+        default:
+            return "Media engine error (\(code))."
+        }
+    }
     if domain == "AVFoundationErrorDomain" {
         switch code {
         case -11828, -11829:

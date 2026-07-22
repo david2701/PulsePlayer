@@ -81,8 +81,8 @@ struct BasicPlaybackDemoView: View {
                         Button("BipBop 4:3") {
                             Task { await load(DemoMedia.bipbop4x3, "BipBop 4:3") }
                         }
-                        Button("Advanced TS") {
-                            Task { await load(DemoMedia.advancedTS, "Advanced TS") }
+                        Button("BipBop Basic") {
+                            Task { await load(DemoMedia.bipbopBasic, "BipBop Basic") }
                         }
                     }
                 }
