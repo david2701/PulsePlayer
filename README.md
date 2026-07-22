@@ -352,18 +352,28 @@ Honest scope for integrators evaluating the package:
 
 ## License
 
-**MIT** — free to use, modify, and distribute (including commercially).
+**MIT** — Copyright © 2026 **David Villegas**. Full text: [LICENSE](LICENSE).
 
-Copyright © 2026 **David Villegas**. See [LICENSE](LICENSE).
+A short permissive license: free use (including commercial), with credit via the copyright notice. No warranty; no liability for the author.
 
-### Attribution
+| | What it means |
+| --- | --- |
+| **Permissions** | Commercial use · Modification · Distribution · Private use |
+| **Conditions** | Must keep the **license and copyright notice** in copies / substantial portions |
+| **Limitations** | **No warranty** — software is provided “AS IS” · **No liability** — author is not responsible for damages from use |
 
-You may use PulsePlayer in apps, SDKs, and products without paying royalties.
-You **must** keep the copyright notice and permission text from [LICENSE](LICENSE)
-in source distributions and substantial copies of the Software.
+### Attribution (your credit)
 
-When practical, please credit:
+Users may ship PulsePlayer in apps and products without royalties.
+They **must** retain the copyright and permission text from [LICENSE](LICENSE).
+
+When practical, please also credit:
 
 > PulsePlayer by David Villegas — https://github.com/david2701/PulsePlayer
 
-Examples: app About screen, open-source credits list, or project README.
+Examples: app About screen, OSS credits list, or project README.
+
+```swift
+// Optional helper for host UI
+Text(PulsePlayerInfo.attribution) // "PulsePlayer by David Villegas"
+```
