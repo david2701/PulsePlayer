@@ -1,0 +1,43 @@
+name: PulsePlayerDemo
+options:
+  bundleIdPrefix: com.pulseplayer
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+
+packages:
+  PulsePlayer:
+    path: ../..
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    GENERATE_INFOPLIST_FILE: YES
+    INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+    INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+    INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads: NO
+    # Background audio for Now Playing / offline demos
+    INFOPLIST_KEY_UIBackgroundModes: "audio"
+    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.4.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  PulsePlayerDemo:
+    type: application
+    platform: iOS
+    sources:
+      - path: PulsePlayerDemo
+    dependencies:
+      - package: PulsePlayer
+        product: PulsePlayer
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pulseplayer.demo
+        PRODUCT_NAME: PulsePlayerDemo
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: YES

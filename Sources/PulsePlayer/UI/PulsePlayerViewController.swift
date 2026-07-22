@@ -40,11 +40,8 @@ open class PulsePlayerViewController: UIViewController {
         if isMovingFromParent || isBeingDismissed {
             // Keep session alive; only detach layer.
             session.attachPlayerLayer(nil)
+            playerLayer.player = nil
         }
-    }
-
-    deinit {
-        playerLayer.player = nil
     }
 }
 #endif
