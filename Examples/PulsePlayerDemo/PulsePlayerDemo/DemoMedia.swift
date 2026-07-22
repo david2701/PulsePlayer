@@ -1,13 +1,13 @@
 import Foundation
 import PulsePlayer
 
-/// Demo sources — Apple HLS streams verified to load on iOS Simulator.
+/// Demo sources — Apple-hosted HLS samples.
 ///
-/// Avoid:
-/// - Google sample MP4s → often `NSURLError -1102`
-/// - `advanced_stream_ts` → often `CoreMediaErrorDomain -16044` on simulator
+/// Note: some streams fail on **Simulator** (e.g. Google MP4 → -1102,
+/// Advanced TS → CoreMedia -16044) but can work on **device**. We keep them
+/// listed so you can test real failure paths + device playback.
 enum DemoMedia {
-    /// Advanced fMP4 HLS (primary, most reliable).
+    /// Advanced fMP4 HLS (primary, most reliable on sim + device).
     static let bipbopAdvanced = URL(string:
         "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8"
     )!
@@ -22,14 +22,14 @@ enum DemoMedia {
         "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8"
     )!
 
-    /// HEVC advanced example (device preferred; may fall back gracefully).
-    static let bipbopHEVC = URL(string:
-        "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8"
-    )!
-
     /// Legacy basic stream (very compatible).
     static let bipbopBasic = URL(string:
         "https://devstreaming-cdn.apple.com/videos/streaming/examples/basic-stream-osx-ios5.0/master.m3u8"
+    )!
+
+    /// Advanced MPEG-TS HLS (Apple sample). May fail on Simulator with -16044; try on device.
+    static let advancedTS = URL(string:
+        "https://devstreaming-cdn.apple.com/videos/streaming/examples/advanced_stream_ts/master.m3u8"
     )!
 
     /// Alias used by offline / shared demos.
@@ -40,6 +40,7 @@ enum DemoMedia {
         FeedItem(id: "16x9", url: bipbop16x9, title: "BipBop 16:9"),
         FeedItem(id: "4x3", url: bipbop4x3, title: "BipBop 4:3"),
         FeedItem(id: "basic", url: bipbopBasic, title: "BipBop Basic"),
+        FeedItem(id: "ts", url: advancedTS, title: "Advanced TS"),
     ]
 
     /// Dense SRT so cues stay visible while scrubbing demos.
