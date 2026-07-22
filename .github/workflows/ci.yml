@@ -6,9 +6,9 @@ on:
   pull_request:
     branches: [main]
 
-# Package requires Swift tools 6.2+ (swift-tools-version: 6.2).
+# Package requires Swift tools 6.3+ (swift-tools-version: 6.3).
 # On macos-15 the default /Applications/Xcode.app is still 16.4 → Swift 6.1.
-# Pin Xcode 26.x so `swift test` matches local toolchain expectations.
+# Pin Xcode 26.x so `swift test` matches the 6.3 toolchain requirement.
 env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
@@ -30,8 +30,8 @@ jobs:
           }
           xcodebuild -version
           swift --version
-          if ! swift --version 2>&1 | grep -qE 'Swift version 6\.(2|3|4|5|6|7|8|9)'; then
-            echo "::error::Need Swift 6.2+ (package tools-version 6.2)."
+          if ! swift --version 2>&1 | grep -qE 'Swift version 6\.(3|4|5|6|7|8|9)'; then
+            echo "::error::Need Swift 6.3+ (package tools-version 6.3)."
             exit 1
           fi
 

@@ -1,7 +1,7 @@
 # PulsePlayer
 
 [![CI](https://github.com/david2701/PulsePlayer/actions/workflows/ci.yml/badge.svg)](https://github.com/david2701/PulsePlayer/actions/workflows/ci.yml)
-[![Swift 6.2+](https://img.shields.io/badge/Swift-6.2%2B-F05138?logo=swift&logoColor=white)](Package.swift)
+[![Swift 6.3+](https://img.shields.io/badge/Swift-6.3%2B-F05138?logo=swift&logoColor=white)](Package.swift)
 [![Platforms](https://img.shields.io/badge/platforms-iOS%20%7C%20iPadOS%20%7C%20tvOS%2017%2B-black)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![SPM](https://img.shields.io/badge/SPM-compatible-brightgreen.svg)](Package.swift)
@@ -15,7 +15,7 @@ Not an FFmpeg media center. Not a toy `VideoPlayer` wrapper.
 | | |
 | --- | --- |
 | **Product focus** | iOS 17+, iPadOS 17+, tvOS 17+ |
-| **Swift** | 6.2+ · language mode 6 · strict concurrency |
+| **Swift** | 6.3+ · language mode 6 · strict concurrency |
 | **Version** | `0.7.2` (`PulsePlayerInfo.version`) |
 | **Install** | SPM only — no CocoaPods / Carthage |
 
@@ -330,7 +330,7 @@ Full integration notes: [Documentation/INTEGRATION.md](Documentation/INTEGRATION
 
 ## Requirements
 
-- Xcode with **Swift 6.2+**
+- Xcode with **Swift 6.3+**
 - App deployment target **iOS / tvOS 17+**
 - Optional host entitlements: Background Audio, Picture in Picture
 
