@@ -33,12 +33,12 @@ public struct PulsePlayerView: View {
         showsSubtitles: Bool = true,
         showsControls: Bool
     ) {
-        self.session = session
-        self.videoGravity = videoGravity
-        self.showsSubtitles = showsSubtitles
-        self.chrome = showsControls ? .full : .none
-        self.accent = .white
-        self.enableGestures = true
+        self.init(
+            session: session,
+            videoGravity: videoGravity,
+            showsSubtitles: showsSubtitles,
+            chrome: showsControls ? .full : .none
+        )
     }
 
     public var body: some View {
@@ -47,8 +47,7 @@ public struct PulsePlayerView: View {
             playerStack(size: geo.size)
         }
         .background(Color.black)
-        .contentShape(Rectangle())
-        .gesture(enableGestures ? doubleTapSeek : nil)
+        .clipShape(RoundedRectangle(cornerRadius: chrome == .minimal ? 0 : 0, style: .continuous))
         .pulseFullscreen(
             isPresented: $isFullscreen,
             session: session,
@@ -76,6 +75,11 @@ public struct PulsePlayerView: View {
                 PulseSubtitleOverlay(session: session)
             }
 
+            // When chrome is none but gestures wanted, still offer seek zones.
+            if chrome == .none, enableGestures {
+                gestureOnlyOverlay
+            }
+
             if chrome != .none {
                 PulsePlayerControls(
                     session: session,
@@ -89,6 +93,7 @@ public struct PulsePlayerView: View {
                 ProgressView()
                     .progressViewStyle(.circular)
                     .tint(.white)
+                    .scaleEffect(1.05)
             }
 
             if session.status == .failed {
@@ -99,26 +104,49 @@ public struct PulsePlayerView: View {
         .clipped()
     }
 
-    private var failureOverlay: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.title2)
-            Text("Playback failed")
-                .font(.subheadline.weight(.semibold))
-            Text(session.currentError?.userMessage ?? "Unknown error")
-                .font(.caption)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.white.opacity(0.75))
-                .padding(.horizontal, 20)
-            if session.currentError?.isRecoverable == true {
-                Button("Retry") {
-                    Task { await session.retry() }
+    private var gestureOnlyOverlay: some View {
+        HStack(spacing: 0) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    Task { await session.seek(relative: -10) }
                 }
-                .buttonStyle(.borderedProminent)
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    Task { await session.seek(relative: 10) }
+                }
+        }
+    }
+
+    private var failureOverlay: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 28))
+                .symbolRenderingMode(.hierarchical)
+            Text("Playback failed")
+                .font(.headline)
+            Text(session.currentError?.userMessage ?? "Unknown error")
+                .font(.footnote)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white.opacity(0.78))
+                .padding(.horizontal, 24)
+            if session.currentError?.isRecoverable == true {
+                Button {
+                    Task { await session.retry() }
+                } label: {
+                    Text("Retry")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 10)
+                        .background(Color.white.opacity(0.18), in: Capsule())
+                }
+                .buttonStyle(.plain)
             }
         }
         .foregroundStyle(.white)
-        .padding()
+        .padding(20)
+        .background(.ultraThinMaterial.opacity(0.35), in: RoundedRectangle(cornerRadius: 16))
     }
 
     private var shouldShowLoader: Bool {
@@ -126,12 +154,6 @@ public struct PulsePlayerView: View {
         switch session.status {
         case .loading, .buffering: return true
         default: return false
-        }
-    }
-
-    private var doubleTapSeek: some Gesture {
-        TapGesture(count: 2).onEnded {
-            Task { await session.seek(relative: 10) }
         }
     }
     #endif

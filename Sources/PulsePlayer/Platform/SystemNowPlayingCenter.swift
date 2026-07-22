@@ -2,6 +2,7 @@ import Foundation
 import MediaPlayer
 
 /// Updates `MPNowPlayingInfoCenter` and installs remote command handlers.
+/// Handlers are removed by stored tokens (does not wipe other app targets).
 @MainActor
 public final class SystemNowPlayingCenter: NowPlayingCentering {
     public struct CommandHandlers: Sendable {
@@ -30,16 +31,15 @@ public final class SystemNowPlayingCenter: NowPlayingCentering {
     }
 
     private var handlers: CommandHandlers?
-    private var commandsInstalled = false
+    private var tokens: [Any] = []
 
     public init() {}
 
     public func setCommandHandlers(_ handlers: CommandHandlers?) {
+        removeCommands()
         self.handlers = handlers
         if handlers != nil {
-            installCommandsIfNeeded()
-        } else {
-            removeCommands()
+            installCommands()
         }
     }
 
@@ -51,12 +51,8 @@ public final class SystemNowPlayingCenter: NowPlayingCentering {
         rate: Float
     ) {
         var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-        if let title {
-            info[MPMediaItemPropertyTitle] = title
-        }
-        if let subtitle {
-            info[MPMediaItemPropertyArtist] = subtitle
-        }
+        if let title { info[MPMediaItemPropertyTitle] = title }
+        if let subtitle { info[MPMediaItemPropertyArtist] = subtitle }
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsed
         if let duration, duration.isFinite, duration > 0 {
             info[MPMediaItemPropertyPlaybackDuration] = duration
@@ -69,69 +65,69 @@ public final class SystemNowPlayingCenter: NowPlayingCentering {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
-    private func installCommandsIfNeeded() {
-        guard !commandsInstalled else { return }
-        commandsInstalled = true
+    private func installCommands() {
         let center = MPRemoteCommandCenter.shared()
 
         center.playCommand.isEnabled = true
-        center.playCommand.addTarget { [weak self] _ in
+        tokens.append(center.playCommand.addTarget { [weak self] _ in
             guard let self else { return .commandFailed }
             Task { @MainActor in self.handlers?.play() }
             return .success
-        }
+        })
 
         center.pauseCommand.isEnabled = true
-        center.pauseCommand.addTarget { [weak self] _ in
+        tokens.append(center.pauseCommand.addTarget { [weak self] _ in
             guard let self else { return .commandFailed }
             Task { @MainActor in self.handlers?.pause() }
             return .success
-        }
+        })
 
         center.togglePlayPauseCommand.isEnabled = true
-        center.togglePlayPauseCommand.addTarget { [weak self] _ in
+        tokens.append(center.togglePlayPauseCommand.addTarget { [weak self] _ in
             guard let self else { return .commandFailed }
             Task { @MainActor in self.handlers?.togglePlayPause() }
             return .success
-        }
+        })
 
         center.changePlaybackPositionCommand.isEnabled = true
-        center.changePlaybackPositionCommand.addTarget { [weak self] event in
+        tokens.append(center.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let self,
                   let position = event as? MPChangePlaybackPositionCommandEvent
             else { return .commandFailed }
             let time = position.positionTime
             Task { @MainActor in self.handlers?.seek?(time) }
             return .success
-        }
+        })
 
         center.skipForwardCommand.isEnabled = true
         center.skipForwardCommand.preferredIntervals = [15]
-        center.skipForwardCommand.addTarget { [weak self] event in
+        tokens.append(center.skipForwardCommand.addTarget { [weak self] event in
             guard let self else { return .commandFailed }
             let interval = (event as? MPSkipIntervalCommandEvent)?.interval ?? 15
             Task { @MainActor in self.handlers?.skipForward?(interval) }
             return .success
-        }
+        })
 
         center.skipBackwardCommand.isEnabled = true
         center.skipBackwardCommand.preferredIntervals = [15]
-        center.skipBackwardCommand.addTarget { [weak self] event in
+        tokens.append(center.skipBackwardCommand.addTarget { [weak self] event in
             guard let self else { return .commandFailed }
             let interval = (event as? MPSkipIntervalCommandEvent)?.interval ?? 15
             Task { @MainActor in self.handlers?.skipBackward?(interval) }
             return .success
-        }
+        })
     }
 
     private func removeCommands() {
         let center = MPRemoteCommandCenter.shared()
-        center.playCommand.removeTarget(nil)
-        center.pauseCommand.removeTarget(nil)
-        center.togglePlayPauseCommand.removeTarget(nil)
-        center.changePlaybackPositionCommand.removeTarget(nil)
-        center.skipForwardCommand.removeTarget(nil)
-        center.skipBackwardCommand.removeTarget(nil)
-        commandsInstalled = false
+        for token in tokens {
+            center.playCommand.removeTarget(token)
+            center.pauseCommand.removeTarget(token)
+            center.togglePlayPauseCommand.removeTarget(token)
+            center.changePlaybackPositionCommand.removeTarget(token)
+            center.skipForwardCommand.removeTarget(token)
+            center.skipBackwardCommand.removeTarget(token)
+        }
+        tokens.removeAll()
     }
 }

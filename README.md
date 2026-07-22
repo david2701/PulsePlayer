@@ -44,7 +44,7 @@ Focus: **stable lifecycle**, **typed state**, **QoE events**, **easy SPM integra
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.6.0")
+    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.7.0")
 ]
 ```
 
@@ -211,7 +211,9 @@ swift test
 
 ## Version
 
-`PulsePlayerInfo.version` → **0.6.0**
+`PulsePlayerInfo.version` → **0.7.0**
+
+See [Documentation/INTEGRATION.md](Documentation/INTEGRATION.md) for a full integration guide.
 
 ## Advanced (0.6)
 

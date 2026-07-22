@@ -31,7 +31,7 @@ struct PlatformHooksTests {
         #expect(deps.audioSession is SystemAudioSession)
     }
 
-    @Test func versionIs061() {
-        #expect(PulsePlayerInfo.version == "0.6.1")
+    @Test func versionIs070() {
+        #expect(PulsePlayerInfo.version == "0.7.0")
     }
 }
