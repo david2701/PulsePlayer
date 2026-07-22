@@ -1,0 +1,16 @@
+.DS_Store
+/.build
+/Packages
+/*.xcodeproj
+xcuserdata/
+DerivedData/
+.swiftpm/
+*.xcuserstate
+*.swp
+.idea/
+
+# Local / internal (not published)
+DESIGN.md
+docs/
+*.design.md
+.grok/
