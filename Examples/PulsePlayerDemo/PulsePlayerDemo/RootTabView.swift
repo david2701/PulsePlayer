@@ -12,6 +12,9 @@ struct RootTabView: View {
             FeedDemoView()
                 .tabItem { Label("Feed", systemImage: "rectangle.stack.fill") }
 
+            AdvancedDemoView()
+                .tabItem { Label("Pro", systemImage: "slider.horizontal.3") }
+
             OfflineDemoView()
                 .tabItem { Label("Offline", systemImage: "arrow.down.circle.fill") }
         }

@@ -10,6 +10,7 @@
 		1087930B06FB864CD3903CBC /* PulsePlayerDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEBAB591FB6F8C82CA2BAFD0 /* PulsePlayerDemoApp.swift */; };
 		1E348C3D5DBCF1763A932365 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91FE8D21BB6788D5C135776 /* RootTabView.swift */; };
 		AE094AC05B40814DC6B6D688 /* PulsePlayer in Frameworks */ = {isa = PBXBuildFile; productRef = 75C6F142D84A149D410BCEBC /* PulsePlayer */; };
+		B9DAF08B476ECDBD84F37D9A /* AdvancedDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B2D67C8D2247BFF2C9E6E81 /* AdvancedDemoView.swift */; };
 		BCC85707B23AD25784E57866 /* OfflineDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88A3B36ADE3079D9BFE96A88 /* OfflineDemoView.swift */; };
 		D58D380225913B598E377483 /* SubtitlesDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68BA3F6C1859F8F7C26F2C4B /* SubtitlesDemoView.swift */; };
 		D9BCA0FF9F0DF5B4A423416B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1DFA1110256326A8EAB34E03 /* Assets.xcassets */; };
@@ -26,6 +27,7 @@
 		43335877BAB2781F89E81732 /* PulsePlayerDemo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PulsePlayerDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		592A5CF82C1AEEB42C06BF5A /* DemoMedia.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoMedia.swift; sourceTree = "<group>"; };
 		68BA3F6C1859F8F7C26F2C4B /* SubtitlesDemoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitlesDemoView.swift; sourceTree = "<group>"; };
+		7B2D67C8D2247BFF2C9E6E81 /* AdvancedDemoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedDemoView.swift; sourceTree = "<group>"; };
 		88A3B36ADE3079D9BFE96A88 /* OfflineDemoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineDemoView.swift; sourceTree = "<group>"; };
 		BEBAB591FB6F8C82CA2BAFD0 /* PulsePlayerDemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulsePlayerDemoApp.swift; sourceTree = "<group>"; };
 		F91FE8D21BB6788D5C135776 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
@@ -62,6 +64,7 @@
 		F2BDE70B8D175B3252788B57 /* PulsePlayerDemo */ = {
 			isa = PBXGroup;
 			children = (
+				7B2D67C8D2247BFF2C9E6E81 /* AdvancedDemoView.swift */,
 				1DFA1110256326A8EAB34E03 /* Assets.xcassets */,
 				34F8303DA2BC2DA622B9D56A /* BasicPlaybackDemoView.swift */,
 				592A5CF82C1AEEB42C06BF5A /* DemoMedia.swift */,
@@ -159,6 +162,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B9DAF08B476ECDBD84F37D9A /* AdvancedDemoView.swift in Sources */,
 				FF591DC298D249B5299DE344 /* BasicPlaybackDemoView.swift in Sources */,
 				F873C59B2C2E76EF46D6E070 /* DemoMedia.swift in Sources */,
 				F179B9DAAC9D55521A0A216F /* FeedDemoView.swift in Sources */,

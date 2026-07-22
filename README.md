@@ -224,8 +224,14 @@ session.setQuality(session.availableQualities[0])
 session.selectAudioTrack(id: …)
 session.selectTextTrack(id: …) // embedded or "ext-\(subtitleId)"
 
-// FairPlay
-session.contentKeyProvider = MyKeyServer()
+// FairPlay (real HTTP provider — needs Apple FPS cert + your key server)
+session.contentKeyProvider = HTTPContentKeyProvider(
+    configuration: .init(
+        certificateURL: certURL,
+        licenseURL: licenseURL,
+        licenseBody: .jsonBase64SPC // or .rawSPC
+    )
+)
 await session.load(MediaSource(url: drmURL, contentKeyAssetId: "asset-1"))
 
 // Playlist
