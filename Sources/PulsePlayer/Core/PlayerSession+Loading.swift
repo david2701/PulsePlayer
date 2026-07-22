@@ -26,6 +26,7 @@ extension PlayerSession {
         indicatedBitrate = nil
         observedBitrate = nil
         bufferProgressValue = nil
+        wasAtLiveEdge = false
 
         startStartupWatchdog(generation: gen)
 

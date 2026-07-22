@@ -170,8 +170,14 @@ extension PlayerSession {
             let mediaTime = isSeeking ? playbackTime : t
             refreshSubtitles(at: mediaTime)
             adCueTracker.tick(time: mediaTime)
-            if currentSource?.isLive == true, isAtLiveEdge {
-                emit(.liveEdgeReached)
+            if currentSource?.isLive == true {
+                let atEdge = isAtLiveEdge
+                if atEdge, !wasAtLiveEdge {
+                    emit(.liveEdgeReached)
+                }
+                wasAtLiveEdge = atEdge
+            } else {
+                wasAtLiveEdge = false
             }
             // Headless first-frame fallback: time advanced while intending to play.
             if !didEmitFirstFrame, wantsPlaying, t > 0.05 {

@@ -84,6 +84,8 @@ public final class PlayerSession: Identifiable {
     var platformConfigured = false
     var _contentKeyProvider: (any ContentKeyProviding)?
     var thumbnailTask: Task<Void, Never>?
+    /// Avoid spamming `.liveEdgeReached` every position tick.
+    var wasAtLiveEdge = false
 
     public init(
         configuration: PlayerConfiguration = .default,
