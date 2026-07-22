@@ -7,15 +7,14 @@ on:
     branches: [main]
 
 # Package requires Swift tools 6.3+ (swift-tools-version: 6.3).
-# On macos-15 the default /Applications/Xcode.app is still 16.4 → Swift 6.1.
-# Pin Xcode 26.x so `swift test` matches the 6.3 toolchain requirement.
+# macos-15 + Xcode 26.3 only ships Swift 6.2.4 — use macos-26 + Xcode 26.6 (Swift 6.3.x).
 env:
-  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 
 jobs:
   test:
     name: swift test
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
@@ -43,7 +42,7 @@ jobs:
 
   build-demo:
     name: build iOS demo
-    runs-on: macos-15
+    runs-on: macos-26
     needs: test
     steps:
       - uses: actions/checkout@v4
@@ -64,9 +63,9 @@ jobs:
           set -euo pipefail
           xcodegen generate
 
-          DEST='platform=iOS Simulator,name=iPhone 16'
-          if xcrun simctl list devices available | grep -q 'iPhone 17'; then
-            DEST='platform=iOS Simulator,name=iPhone 17'
+          DEST='platform=iOS Simulator,name=iPhone 17'
+          if ! xcrun simctl list devices available | grep -q 'iPhone 17'; then
+            DEST='platform=iOS Simulator,name=iPhone 16'
           fi
           echo "Building with -destination $DEST"
 
