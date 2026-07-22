@@ -6,18 +6,38 @@ on:
   pull_request:
     branches: [main]
 
+# Package requires Swift tools 6.2+ (swift-tools-version: 6.2).
+# On macos-15 the default /Applications/Xcode.app is still 16.4 → Swift 6.1.
+# Pin Xcode 26.x so `swift test` matches local toolchain expectations.
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
 jobs:
   test:
     name: swift test
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
-      - name: Swift version
-        run: swift --version
+
+      - name: Show toolchain
+        run: |
+          set -euo pipefail
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR"
+          test -d "$DEVELOPER_DIR" || {
+            echo "::error::Missing $DEVELOPER_DIR — list of Xcodes:"
+            ls /Applications | grep -i Xcode || true
+            exit 1
+          }
+          xcodebuild -version
+          swift --version
+          if ! swift --version 2>&1 | grep -qE 'Swift version 6\.(2|3|4|5|6|7|8|9)'; then
+            echo "::error::Need Swift 6.2+ (package tools-version 6.2)."
+            exit 1
+          fi
+
       - name: Run tests
         run: swift test
+
       - name: Line count guard
         run: ./Scripts/check-line-count.sh
 
@@ -27,17 +47,32 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Show toolchain
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR"
+          xcodebuild -version
+          swift --version
+
       - name: Install XcodeGen
         run: brew install xcodegen
+
       - name: Generate & build demo
         working-directory: Examples/PulsePlayerDemo
         run: |
+          set -euo pipefail
           xcodegen generate
+
+          DEST='platform=iOS Simulator,name=iPhone 16'
+          if xcrun simctl list devices available | grep -q 'iPhone 17'; then
+            DEST='platform=iOS Simulator,name=iPhone 17'
+          fi
+          echo "Building with -destination $DEST"
+
           xcodebuild \
             -project PulsePlayerDemo.xcodeproj \
             -scheme PulsePlayerDemo \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination "$DEST" \
             -derivedDataPath ./DerivedData \
             build CODE_SIGNING_ALLOWED=NO
