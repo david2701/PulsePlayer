@@ -14,15 +14,32 @@ public final class PlayerSession: Identifiable {
     public internal(set) var currentError: PlayerError?
     public internal(set) var configuration: PlayerConfiguration
 
-    public var currentTime: TimeInterval { engine.currentTime() }
-    public var duration: TimeInterval? { engine.duration() }
+    /// Observed playback clock (drives UI scrubber / labels). Prefer this over `currentTime` in SwiftUI.
+    public internal(set) var playbackTime: TimeInterval = 0
+    public internal(set) var playbackDuration: TimeInterval?
+    public internal(set) var volume: Float = 1
+    public internal(set) var isSeeking: Bool = false
     public internal(set) var isExternalPlaybackActive: Bool = false
+
+    /// Live engine time (not Observation-tracked by itself).
+    public var currentTime: TimeInterval { engine.currentTime() }
+    public var duration: TimeInterval? { engine.duration() ?? playbackDuration }
+
+    public var isPlaying: Bool {
+        status == .playing || status == .buffering
+    }
+
+    public var isMuted: Bool { configuration.isMuted }
 
     /// External subtitle tracks (SRT/VTT).
     public internal(set) var subtitleTracks: [SubtitleTrack] = []
     public internal(set) var activeSubtitleTrackID: String?
     /// Current on-screen subtitle text.
     public internal(set) var currentSubtitleText: String?
+    /// Visual style for `PulseSubtitleOverlay`.
+    public var subtitleStyle: SubtitleStyle = .default
+    /// Master switch for external subtitles.
+    public var subtitlesEnabled: Bool = true
 
     let engine: any PlaybackControlling
     let dependencies: PlayerDependencies
@@ -51,6 +68,9 @@ public final class PlayerSession: Identifiable {
         self.dependencies = dependencies
         self.engine = dependencies.engineFactory()
         self.engine.applyConfiguration(configuration)
+        self.engine.setMuted(configuration.isMuted)
+        self.volume = 1
+        self.engine.setVolume(1)
         self.engine.onSignal = { [weak self] signal in
             self?.handleEngineSignal(signal)
         }

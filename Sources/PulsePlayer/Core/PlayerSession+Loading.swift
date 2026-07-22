@@ -116,8 +116,10 @@ extension PlayerSession {
             emit(.readyToPlay(sourceID: id))
         }
         if let d = engine.duration() {
+            playbackDuration = d
             emit(.duration(d))
         }
+        playbackTime = engine.currentTime()
 
         let shouldPlay = wantsPlaying || configuration.autoplay
         if shouldPlay {

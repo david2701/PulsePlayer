@@ -23,7 +23,8 @@ Focus: **stable lifecycle**, **typed state**, **QoE events**, **easy SPM integra
 | UI | Zero-chrome `PulsePlayerView` + `PulsePlayerViewController` |
 | System | Picture in Picture, Now Playing, audio session |
 | Feeds | `PlayerPool` — prewarm / rebalance for vertical lists |
-| Subtitles | External **SRT / WebVTT**, offset, SwiftUI overlay |
+| Subtitles | External **SRT / WebVTT**, offset, style, enable/disable, overlay |
+| Controls | Built-in chrome: **play/pause, scrub/seek, skip, mute, volume** |
 | Offline | **HLS/progressive download** (iOS/tvOS) → play from local asset |
 
 ## Install
@@ -37,7 +38,7 @@ Focus: **stable lifecycle**, **typed state**, **QoE events**, **easy SPM integra
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.4.0")
+    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.4.1")
 ]
 ```
 
@@ -57,7 +58,9 @@ struct PlayerScreen: View {
     )
 
     var body: some View {
-        PulsePlayerView(session: session)
+        // showsControls: play/pause · scrubber · skip · mute · volume
+        PulsePlayerView(session: session, showsSubtitles: true, showsControls: true)
+            .aspectRatio(16/9, contentMode: .fit)
             .task {
                 let url = URL(string: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8")!
                 await session.load(MediaSource(url: url, title: "Sample"))
@@ -146,9 +149,20 @@ try await session.addSubtitle(from: subtitleURL, languageCode: "es", label: "Esp
 
 session.setSubtitleOffset(0.3)
 session.selectSubtitle(id: nil) // hide
-// session.currentSubtitleText updates during playback
-// PulsePlayerView shows subtitles by default
+session.setSubtitlesEnabled(true)
+session.applySubtitleStyle(.large) // or custom SubtitleStyle
+// session.currentSubtitleText + playbackTime drive the overlay
 ```
+
+## Built-in controls
+
+```swift
+PulsePlayerView(session: session, showsControls: true)
+// or
+PulsePlayerControls(session: session)
+```
+
+Uses observed `playbackTime` / `playbackDuration` so the scrubber seeks for real (not a decorative progress bar).
 
 ## Offline downloads (iOS / tvOS)
 
@@ -187,7 +201,7 @@ swift test
 
 ## Version
 
-`PulsePlayerInfo.version` → **0.4.0**
+`PulsePlayerInfo.version` → **0.4.1**
 
 ## License
 

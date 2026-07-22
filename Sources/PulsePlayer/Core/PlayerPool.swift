@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Priority for pool residency. Higher raw value = keep longer.
 /// Order: distant < next < visible.
@@ -14,9 +15,13 @@ public enum PoolPriority: Int, Sendable, Comparable {
 
 /// Reuses a fixed number of `PlayerSession`s for feed-style UIs.
 @MainActor
+@Observable
 public final class PlayerPool {
     public let size: Int
     public private(set) var configuration: PlayerConfiguration
+
+    /// Bumps when membership changes so SwiftUI re-reads `session(for:)`.
+    public private(set) var revision: UInt64 = 0
 
     private struct Entry {
         let session: PlayerSession
@@ -25,10 +30,10 @@ public final class PlayerPool {
         var lastUsed: ContinuousClock.Instant
     }
 
-    private var entries: [Entry] = []
-    private let dependencies: PlayerDependencies
-    private var prewarmTask: Task<Void, Never>?
-    private var maxPrewarmConcurrent: Int
+    @ObservationIgnored private var entries: [Entry] = []
+    @ObservationIgnored private let dependencies: PlayerDependencies
+    @ObservationIgnored private var prewarmTask: Task<Void, Never>?
+    @ObservationIgnored private var maxPrewarmConcurrent: Int
 
     public init(
         size: Int = 3,
@@ -44,11 +49,17 @@ public final class PlayerPool {
 
     /// Active sessions currently held by the pool.
     public var sessions: [PlayerSession] {
-        entries.map(\.session)
+        _ = revision
+        return entries.map(\.session)
     }
 
     public func session(for sourceID: String) -> PlayerSession? {
-        entries.first { $0.sourceID == sourceID }?.session
+        _ = revision
+        return entries.first { $0.sourceID == sourceID }?.session
+    }
+
+    private func noteChange() {
+        revision &+= 1
     }
 
     /// Acquire a session for `source`, loading content. May evict lower-priority entries.
@@ -76,6 +87,7 @@ public final class PlayerPool {
                 lastUsed: ContinuousClock.now
             )
         )
+        noteChange()
 
         var loadConfig = configuration
         loadConfig.autoplay = (priority == .visible)
@@ -84,6 +96,7 @@ public final class PlayerPool {
         if priority == .visible {
             session.play()
         }
+        noteChange()
         return session
     }
 
@@ -115,6 +128,7 @@ public final class PlayerPool {
             return
         }
         let entry = entries.remove(at: idx)
+        noteChange()
         entry.session.pause()
         if configuration.pauseWhenDetached {
             Task { await entry.session.reset() }
@@ -149,6 +163,7 @@ public final class PlayerPool {
         }
 
         await trimToSize()
+        noteChange()
     }
 
     /// Shutdown: invalidate all sessions.
@@ -159,6 +174,7 @@ public final class PlayerPool {
             entry.session.invalidate()
         }
         entries.removeAll()
+        noteChange()
     }
 
     public func updateConfiguration(_ mutate: (inout PlayerConfiguration) -> Void) {
@@ -226,6 +242,7 @@ public final class PlayerPool {
     private func evict(at index: Int) async {
         guard entries.indices.contains(index) else { return }
         let entry = entries.remove(at: index)
+        noteChange()
         entry.session.pause()
         if configuration.pauseWhenDetached {
             await entry.session.reset()

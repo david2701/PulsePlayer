@@ -106,8 +106,22 @@ extension PlayerSession {
         currentSubtitleText = nil
     }
 
+    public func setSubtitlesEnabled(_ enabled: Bool) {
+        subtitlesEnabled = enabled
+        if !enabled {
+            currentSubtitleText = nil
+        } else {
+            refreshSubtitles(at: playbackTime)
+        }
+    }
+
+    public func applySubtitleStyle(_ style: SubtitleStyle) {
+        subtitleStyle = style
+    }
+
     func refreshSubtitles(at mediaTime: TimeInterval) {
-        guard let id = activeSubtitleTrackID,
+        guard subtitlesEnabled,
+              let id = activeSubtitleTrackID,
               let track = subtitleTracks.first(where: { $0.id == id })
         else {
             if currentSubtitleText != nil {

@@ -56,10 +56,20 @@ extension PlayerSession {
 
     public func setMuted(_ muted: Bool) {
         _ = updateConfiguration { $0.isMuted = muted }
+        engine.setMuted(muted)
     }
 
     public func setVolume(_ volume: Float) {
-        engine.setVolume(volume)
+        let v = max(0, min(1, volume))
+        self.volume = v
+        engine.setVolume(v)
+        if v > 0, configuration.isMuted {
+            setMuted(false)
+        }
+    }
+
+    public func toggleMute() {
+        setMuted(!isMuted)
     }
 
     func handleEngineSignal(_ signal: PlayerEngineSignal) {
@@ -145,15 +155,19 @@ extension PlayerSession {
             emit(.externalPlaybackActive(active))
 
         case .timeObserved(let t):
+            if !isSeeking {
+                playbackTime = t
+            }
             emit(.position(t))
             refreshNowPlaying()
-            refreshSubtitles(at: t)
+            refreshSubtitles(at: isSeeking ? playbackTime : t)
             // Headless first-frame fallback: time advanced while intending to play.
             if !didEmitFirstFrame, wantsPlaying, t > 0.05 {
                 emitFirstFrameIfNeeded()
             }
 
         case .durationKnown(let d):
+            playbackDuration = d
             emit(.duration(d))
 
         case .bufferProgress(let p):

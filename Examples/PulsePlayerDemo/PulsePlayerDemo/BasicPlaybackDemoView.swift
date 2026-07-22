@@ -10,105 +10,90 @@ struct BasicPlaybackDemoView: View {
             updatesNowPlayingInfo: true
         )
     )
-    @State private var statusText = "idle"
-    @State private var position: TimeInterval = 0
-    @State private var duration: TimeInterval?
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                PulsePlayerView(session: session)
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    PulsePlayerView(
+                        session: session,
+                        showsSubtitles: false,
+                        showsControls: true
+                    )
                     .frame(maxWidth: .infinity)
                     .aspectRatio(16 / 9, contentMode: .fit)
-                    .background(Color.black)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
 
-                Text(statusText)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-
-                if let duration, duration > 0 {
-                    ProgressView(value: position, total: duration)
-                        .padding(.horizontal)
-                    Text(timeLabel(position) + " / " + timeLabel(duration))
-                        .font(.caption2.monospaced())
+                    metaPanel
+                    Spacer(minLength: 0)
                 }
-
-                HStack(spacing: 20) {
-                    Button("Play", systemImage: "play.fill") { session.play() }
-                    Button("Pause", systemImage: "pause.fill") { session.pause() }
-                    Button("-10s", systemImage: "gobackward.10") {
-                        Task { await session.seek(relative: -10) }
-                    }
-                    Button("+10s", systemImage: "goforward.10") {
-                        Task { await session.seek(relative: 10) }
-                    }
-                }
-                .buttonStyle(.bordered)
-
-                HStack {
-                    Button("PiP", systemImage: "pip.enter") {
-                        session.startPictureInPicture()
-                    }
-                    .disabled(!session.isPictureInPicturePossible)
-
-                    Button("Reload HLS") {
-                        Task { await loadBipBop() }
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-
-                Spacer()
             }
             .navigationTitle("Playback")
-            .task {
-                await loadBipBop()
-                listenEvents()
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu("Source") {
+                        Button("BipBop HLS") {
+                            Task { await load(DemoMedia.bipbopHLS, title: "BipBop HLS") }
+                        }
+                        Button("Big Buck Bunny") {
+                            Task { await load(DemoMedia.bigBuckBunnyMP4, title: "Big Buck Bunny") }
+                        }
+                        Button("Elephants Dream") {
+                            Task { await load(DemoMedia.elephantsDreamMP4, title: "Elephants Dream") }
+                        }
+                    }
+                }
             }
+            .task { await load(DemoMedia.bipbopHLS, title: "BipBop HLS") }
             .onDisappear { session.pause() }
         }
     }
 
-    private func loadBipBop() async {
-        await session.load(
-            DemoMedia.source(url: DemoMedia.bipbopHLS, title: "BipBop HLS")
-        )
-    }
-
-    private func listenEvents() {
-        Task {
-            for await event in session.makeEventStream() {
-                await MainActor.run {
-                    switch event {
-                    case .stateChanged(_, let to):
-                        statusText = to.rawValue
-                    case .position(let t):
-                        position = t
-                        duration = session.duration
-                    case .duration(let d):
-                        duration = d
-                    case .failed(let err):
-                        statusText = "failed: \(err)"
-                    case .firstFrame(let elapsed):
-                        statusText = "firstFrame \(String(format: "%.2fs", elapsed.timeInterval))"
-                    default:
-                        break
+    private var metaPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                statusChip
+                Spacer()
+                if session.isPictureInPicturePossible {
+                    Button {
+                        session.startPictureInPicture()
+                    } label: {
+                        Label("PiP", systemImage: "pip.enter")
                     }
+                    .buttonStyle(.bordered)
                 }
             }
+
+            Text(session.currentSource?.title ?? "No source")
+                .font(.headline)
+
+            Text("Tap video for chrome · drag scrubber to seek · volume on the right")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
     }
 
-    private func timeLabel(_ t: TimeInterval) -> String {
-        let s = Int(t.rounded())
-        return String(format: "%d:%02d", s / 60, s % 60)
+    private var statusChip: some View {
+        Text(session.status.rawValue.uppercased())
+            .font(.caption2.weight(.bold).monospaced())
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.white.opacity(0.1), in: Capsule())
     }
-}
 
-private extension Duration {
-    var timeInterval: TimeInterval {
-        let c = components
-        return TimeInterval(c.seconds) + TimeInterval(c.attoseconds) / 1e18
+    private func load(_ url: URL, title: String) async {
+        await session.load(DemoMedia.source(url: url, id: title, title: title))
+        session.play()
     }
 }

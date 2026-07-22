@@ -1,99 +1,138 @@
 import PulsePlayer
 import SwiftUI
 
+/// Page-based feed (more reliable than LazyVStack + scrollPosition for session binding).
 struct FeedDemoView: View {
     @State private var pool = PlayerPool(
         size: 3,
         configuration: PlayerConfiguration(
             autoplay: false,
             isMuted: true,
-            updatesNowPlayingInfo: false
+            updatesNowPlayingInfo: false,
+            pauseWhenDetached: true
         )
     )
-    @State private var visibleID: String?
+    @State private var index = 0
+    @State private var readyIDs: Set<String> = []
 
     private let items = DemoMedia.feedItems
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(items) { item in
-                        FeedCellView(item: item, pool: pool)
-                            .containerRelativeFrame(.vertical)
-                            .id(item.id)
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                TabView(selection: $index) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
+                        // Read revision so pages refresh when pool acquires sessions.
+                        let _ = pool.revision
+                        FeedPage(
+                            item: item,
+                            session: pool.session(for: item.id),
+                            isActive: i == index
+                        )
+                        .tag(i)
                     }
                 }
-                .scrollTargetLayout()
+                .tabViewStyle(.page(indexDisplayMode: .automatic))
+                .ignoresSafeArea(edges: .bottom)
+
+                VStack {
+                    HStack {
+                        Text("\(index + 1)/\(items.count)")
+                            .font(.caption.weight(.bold).monospaced())
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.ultraThinMaterial, in: Capsule())
+                        Spacer()
+                    }
+                    .padding()
+                    Spacer()
+                }
             }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $visibleID)
-            .ignoresSafeArea(edges: .bottom)
             .navigationTitle("Feed")
             .navigationBarTitleDisplayMode(.inline)
-            .task(id: visibleID) {
-                await onVisibleChanged()
-            }
-            .onAppear {
-                if visibleID == nil {
-                    visibleID = items.first?.id
-                }
+            .task(id: index) {
+                await activate(index: index)
             }
             .onDisappear {
                 pool.shutdown()
+                readyIDs = []
             }
         }
     }
 
-    private func onVisibleChanged() async {
-        guard let visibleID,
-              let item = items.first(where: { $0.id == visibleID })
-        else { return }
+    private func activate(index: Int) async {
+        guard items.indices.contains(index) else { return }
+        let item = items[index]
 
         _ = await pool.acquire(
             source: MediaSource(id: item.id, url: item.url, title: item.title),
             priority: .visible
         )
+        readyIDs.insert(item.id)
 
-        let idx = items.firstIndex(where: { $0.id == visibleID }) ?? 0
-        let next = items.dropFirst(idx + 1).prefix(2).map {
-            MediaSource(id: $0.id, url: $0.url, title: $0.title)
+        // Prewarm neighbors.
+        var neighbors: [MediaSource] = []
+        if index + 1 < items.count {
+            let n = items[index + 1]
+            neighbors.append(MediaSource(id: n.id, url: n.url, title: n.title))
         }
-        await pool.prewarm(Array(next))
-        await pool.rebalance(visibleIDs: [visibleID] + next.map(\.id))
+        if index + 2 < items.count {
+            let n = items[index + 2]
+            neighbors.append(MediaSource(id: n.id, url: n.url, title: n.title))
+        }
+        await pool.prewarm(neighbors)
+
+        var order = [item.id]
+        order.append(contentsOf: neighbors.map(\.id))
+        await pool.rebalance(visibleIDs: order)
+        readyIDs.formUnion(order)
     }
 }
 
-private struct FeedCellView: View {
+private struct FeedPage: View {
     let item: FeedItem
-    let pool: PlayerPool
+    let session: PlayerSession?
+    let isActive: Bool
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             Color.black
-            if let session = pool.session(for: item.id) {
-                PulsePlayerView(session: session, showsSubtitles: false)
+            if let session {
+                PulsePlayerView(
+                    session: session,
+                    videoGravity: .resizeAspectFill,
+                    showsSubtitles: false,
+                    showsControls: isActive
+                )
+                .id(session.id)
             } else {
                 ProgressView()
                     .tint(.white)
+                    .scaleEffect(1.2)
             }
-            VStack(alignment: .leading, spacing: 4) {
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.85)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+            .allowsHitTesting(false)
+
+            VStack(alignment: .leading, spacing: 6) {
                 Text(item.title)
-                    .font(.title3.bold())
+                    .font(.title2.bold())
                 Text(item.id)
                     .font(.caption.monospaced())
-                    .opacity(0.8)
+                    .opacity(0.7)
+                Text(isActive ? "Swipe for next · use controls to seek" : "Inactive")
+                    .font(.footnote)
+                    .opacity(0.85)
             }
             .foregroundStyle(.white)
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.7)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .padding(20)
+            .padding(.bottom, 28)
         }
     }
 }

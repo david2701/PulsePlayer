@@ -39,7 +39,7 @@ public struct PlayerConfiguration: Sendable, Equatable {
         canUseNetworkResourcesForLiveStreamingWhilePaused: Bool = false,
         retry: RetryPolicy = .default,
         stall: StallPolicy = .default,
-        positionUpdateInterval: TimeInterval = 0.25,
+        positionUpdateInterval: TimeInterval = 0.1,
         pauseWhenDetached: Bool = true
     ) {
         self.autoplay = autoplay
