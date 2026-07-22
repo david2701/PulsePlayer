@@ -164,6 +164,16 @@ if let source = manager.playableSource(id: "episode-1") {
 
 Not available on macOS. Use a device/simulator for real downloads.
 
+## Demo app
+
+```bash
+cd Examples/PulsePlayerDemo
+xcodegen generate   # if the .xcodeproj is missing
+open PulsePlayerDemo.xcodeproj
+```
+
+Tabs: **Play** (HLS), **Subs** (SRT), **Feed** (PlayerPool), **Offline**.
+
 ## Requirements
 
 - Xcode with Swift 6.2+ toolchain
@@ -173,6 +183,7 @@ Not available on macOS. Use a device/simulator for real downloads.
 swift test
 ./Scripts/check-line-count.sh   # optional: max 400 lines per Swift file
 ```
+
 
 ## Version
 
