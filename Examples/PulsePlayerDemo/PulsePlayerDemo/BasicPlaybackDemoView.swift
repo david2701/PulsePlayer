@@ -15,7 +15,9 @@ struct BasicPlaybackDemoView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { geo in
-                let playerHeight = min(geo.size.width * 9 / 16, geo.size.height * 0.42)
+                // Keep room for transport chrome (~120pt) so controls never clip.
+                let ideal = geo.size.width * 9 / 16
+                let playerHeight = min(max(ideal, 240), geo.size.height * 0.48)
 
                 VStack(spacing: 0) {
                     PulsePlayerView(
@@ -27,6 +29,7 @@ struct BasicPlaybackDemoView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: playerHeight)
                     .background(Color.black)
+                    .clipped()
 
                     ScrollView {
                         VStack(alignment: .leading, spacing: 16) {

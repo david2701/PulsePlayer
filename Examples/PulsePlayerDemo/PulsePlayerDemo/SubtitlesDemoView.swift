@@ -14,7 +14,7 @@ struct SubtitlesDemoView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { geo in
-                let playerHeight = min(geo.size.width * 9 / 16, geo.size.height * 0.38)
+                let playerHeight = min(max(geo.size.width * 9 / 16, 240), geo.size.height * 0.42)
                 VStack(spacing: 0) {
                     PulsePlayerView(
                         session: session,
