@@ -3,7 +3,7 @@
 ## Install
 
 ```swift
-.package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.7.2")
+.package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.8.0")
 ```
 
 ## Minimal playback
@@ -35,11 +35,19 @@ Gestures: **double-tap left −10s / right +10s** (minimal & full/lite zones).
 ```swift
 session.selectAudioTrack(id: …)
 session.selectTextTrack(id: …)          // or "ext-\(subtitleId)"
-session.setQualityAuto()
-session.setQuality(session.availableQualities[0])
+await session.setQualityAuto()
+await session.setQuality(session.availableQualities[0])
+// Hard lock reloads the HLS media playlist when `playlistURL` is known.
 ```
 
 Chrome `.full` includes track + quality sheets.
+
+## Theme
+
+```swift
+PulsePlayerView(session: session, chrome: .full, theme: .pulse)
+// or custom PlayerChromeTheme(accent: .orange, showsScrubPreview: true)
+```
 
 ## Offline
 

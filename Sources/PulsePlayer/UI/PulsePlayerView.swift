@@ -6,7 +6,7 @@ public struct PulsePlayerView: View {
     private let videoGravity: PlayerVideoGravity
     private let showsSubtitles: Bool
     private let chrome: PlayerChromeMode
-    private let accent: Color
+    private let theme: PlayerChromeTheme
     private let enableGestures: Bool
 
     @State private var isFullscreen = false
@@ -16,14 +16,17 @@ public struct PulsePlayerView: View {
         videoGravity: PlayerVideoGravity = .resizeAspect,
         showsSubtitles: Bool = true,
         chrome: PlayerChromeMode = .none,
-        accent: Color = .white,
+        theme: PlayerChromeTheme = .default,
+        accent: Color? = nil,
         enableGestures: Bool = true
     ) {
         self.session = session
         self.videoGravity = videoGravity
         self.showsSubtitles = showsSubtitles
         self.chrome = chrome
-        self.accent = accent
+        var resolved = theme
+        if let accent { resolved.accent = accent }
+        self.theme = resolved
         self.enableGestures = enableGestures
     }
 
@@ -47,7 +50,6 @@ public struct PulsePlayerView: View {
             playerStack(size: geo.size)
         }
         .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: chrome == .minimal ? 0 : 0, style: .continuous))
         .pulseFullscreen(
             isPresented: $isFullscreen,
             session: session,
@@ -75,7 +77,6 @@ public struct PulsePlayerView: View {
                 PulseSubtitleOverlay(session: session)
             }
 
-            // When chrome is none but gestures wanted, still offer seek zones.
             if chrome == .none, enableGestures {
                 gestureOnlyOverlay
             }
@@ -84,7 +85,7 @@ public struct PulsePlayerView: View {
                 PulsePlayerControls(
                     session: session,
                     mode: chrome,
-                    accent: accent,
+                    theme: theme,
                     onFullscreen: { isFullscreen = true }
                 )
             }
@@ -92,7 +93,7 @@ public struct PulsePlayerView: View {
             if shouldShowLoader {
                 ProgressView()
                     .progressViewStyle(.circular)
-                    .tint(.white)
+                    .tint(theme.accent)
                     .scaleEffect(1.05)
             }
 
@@ -139,7 +140,7 @@ public struct PulsePlayerView: View {
                         .font(.subheadline.weight(.semibold))
                         .padding(.horizontal, 22)
                         .padding(.vertical, 10)
-                        .background(Color.white.opacity(0.18), in: Capsule())
+                        .background(theme.accent.opacity(0.22), in: Capsule())
                 }
                 .buttonStyle(.plain)
             }

@@ -4,7 +4,7 @@ import SwiftUI
 public struct PulsePlayerControls: View {
     let session: PlayerSession
     let mode: PlayerChromeMode
-    let accent: Color
+    let theme: PlayerChromeTheme
     let showsAirPlay: Bool
     let showsQuality: Bool
     let skipInterval: TimeInterval
@@ -21,7 +21,8 @@ public struct PulsePlayerControls: View {
     public init(
         session: PlayerSession,
         mode: PlayerChromeMode = .full,
-        accent: Color = .white,
+        theme: PlayerChromeTheme = .default,
+        accent: Color? = nil,
         showsAirPlay: Bool = true,
         showsQuality: Bool = true,
         skipInterval: TimeInterval = 10,
@@ -29,12 +30,16 @@ public struct PulsePlayerControls: View {
     ) {
         self.session = session
         self.mode = mode
-        self.accent = accent
+        var resolved = theme
+        if let accent { resolved.accent = accent }
+        self.theme = resolved
         self.showsAirPlay = showsAirPlay
         self.showsQuality = showsQuality
         self.skipInterval = skipInterval
         self.onFullscreen = onFullscreen
     }
+
+    var accent: Color { theme.accent }
 
     public var body: some View {
         Group {

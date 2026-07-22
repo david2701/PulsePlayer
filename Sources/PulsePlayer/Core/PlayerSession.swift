@@ -55,6 +55,10 @@ public final class PlayerSession: Identifiable {
     public internal(set) var availableQualities: [StreamQuality] = []
     /// Selected quality id (`auto` or variant id).
     public internal(set) var selectedQualityId: String = StreamQuality.auto.id
+    /// Master playlist URL used to rebuild the quality ladder / unlock hard lock.
+    public internal(set) var qualityMasterURL: URL?
+    /// Whether the engine is currently on a single locked media playlist.
+    var qualityHardLocked = false
 
     /// Optional queue for playlist autoplay-next.
     public weak var playbackQueue: PlaybackQueue?

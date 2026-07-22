@@ -49,10 +49,10 @@ struct AdvancedDemoView: View {
                         }
 
                         Section("Quality") {
-                            Button("Auto") { session.setQualityAuto() }
+                            Button("Auto") { Task { await session.setQualityAuto() } }
                             ForEach(session.availableQualities) { q in
                                 Button {
-                                    session.setQuality(q)
+                                    Task { await session.setQuality(q) }
                                 } label: {
                                     HStack {
                                         Text(q.label)

@@ -67,8 +67,10 @@ struct QualityPickerSheet: View {
         NavigationStack {
             List {
                 Button {
-                    session.setQualityAuto()
-                    dismiss()
+                    Task {
+                        await session.setQualityAuto()
+                        dismiss()
+                    }
                 } label: {
                     HStack {
                         Text("Auto")
@@ -80,11 +82,18 @@ struct QualityPickerSheet: View {
                 }
                 ForEach(session.availableQualities) { q in
                     Button {
-                        session.setQuality(q)
-                        dismiss()
+                        Task {
+                            await session.setQuality(q)
+                            dismiss()
+                        }
                     } label: {
                         HStack {
-                            Text(q.label)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(q.label)
+                                Text(q.supportsHardLock ? "Hard lock" : "Soft cap")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                             Text("· \(q.bandwidth / 1000) kbps")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -96,7 +105,7 @@ struct QualityPickerSheet: View {
                     }
                 }
             }
-            .navigationTitle("Quality")
+            .navigationTitle(session.isQualityHardLocked ? "Quality (locked)" : "Quality")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }

@@ -47,4 +47,22 @@ public struct MediaSource: Sendable, Equatable, Identifiable {
         self.adCues = adCues
         self.dvrWindow = dvrWindow
     }
+
+    /// Copy with a different stream URL (quality lock / unlock).
+    public func replacingURL(_ url: URL) -> MediaSource {
+        MediaSource(
+            id: id,
+            url: url,
+            headers: headers,
+            cookies: cookies,
+            isLive: isLive,
+            preferredForwardBufferDuration: preferredForwardBufferDuration,
+            posterURL: posterURL,
+            title: title,
+            subtitle: subtitle,
+            contentKeyAssetId: contentKeyAssetId,
+            adCues: adCues,
+            dvrWindow: dvrWindow
+        )
+    }
 }

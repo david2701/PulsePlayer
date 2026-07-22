@@ -2,7 +2,8 @@ import Foundation
 
 /// Lightweight HLS master playlist parser for quality variants.
 public enum HLSMasterParser: Sendable {
-    public static func parseQualities(from masterPlaylist: String) -> [StreamQuality] {
+    /// Parse `#EXT-X-STREAM-INF` variants. Relative URIs resolve against `baseURL` when provided.
+    public static func parseQualities(from masterPlaylist: String, baseURL: URL? = nil) -> [StreamQuality] {
         var qualities: [StreamQuality] = []
         let lines = masterPlaylist
             .replacingOccurrences(of: "\r\n", with: "\n")
@@ -24,34 +25,39 @@ public enum HLSMasterParser: Sendable {
                         height = Int(parts[1])
                     }
                 }
-                // Next non-empty non-tag line is URI (used as id seed).
-                var uri = "variant-\(qualities.count)"
+                var uriString = "variant-\(qualities.count)"
                 var j = i + 1
                 while j < lines.count {
                     let u = lines[j].trimmingCharacters(in: .whitespaces)
                     if u.isEmpty { j += 1; continue }
                     if u.hasPrefix("#") { break }
-                    uri = u
+                    uriString = u
                     break
                 }
+                let playlistURL = resolvePlaylistURL(uriString, baseURL: baseURL)
+                let stableId = makeStableID(
+                    bandwidth: bandwidth,
+                    height: height,
+                    uri: uriString
+                )
                 qualities.append(
                     StreamQuality(
-                        id: "\(bandwidth)-\(height ?? 0)-\(uri.hashValue)",
+                        id: stableId,
                         bandwidth: bandwidth,
                         width: width,
-                        height: height
+                        height: height,
+                        playlistURL: playlistURL
                     )
                 )
             }
             i += 1
         }
 
-        // Unique by height then bandwidth descending.
-        var seen = Set<Int>()
+        var seen = Set<String>()
         let sorted = qualities.sorted { $0.bandwidth > $1.bandwidth }
         var unique: [StreamQuality] = []
         for q in sorted {
-            let key = q.height ?? q.bandwidth
+            let key = q.id
             if seen.insert(key).inserted {
                 unique.append(q)
             }
@@ -70,12 +76,25 @@ public enum HLSMasterParser: Sendable {
         guard let text = String(data: data, encoding: .utf8) else {
             throw PlayerError.invalidSource("Invalid HLS master playlist encoding")
         }
-        return parseQualities(from: text)
+        return parseQualities(from: text, baseURL: masterURL)
+    }
+
+    private static func resolvePlaylistURL(_ uri: String, baseURL: URL?) -> URL? {
+        if let absolute = URL(string: uri), absolute.scheme != nil {
+            return absolute
+        }
+        guard let baseURL else { return URL(string: uri) }
+        return URL(string: uri, relativeTo: baseURL)?.absoluteURL
+    }
+
+    private static func makeStableID(bandwidth: Int, height: Int?, uri: String) -> String {
+        let h = height.map(String.init) ?? "0"
+        let path = uri.split(separator: "?").first.map(String.init) ?? uri
+        return "\(bandwidth)-\(h)-\(path)"
     }
 
     private static func parseAttributes(_ raw: String) -> [String: String] {
         var result: [String: String] = [:]
-        // Simple split respecting quoted values.
         var current = ""
         var key = ""
         var inQuotes = false

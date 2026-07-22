@@ -11,6 +11,15 @@ struct BasicPlaybackDemoView: View {
         )
     )
     @State private var chrome: PlayerChromeMode = .full
+    @State private var themeName = "Default"
+
+    private var theme: PlayerChromeTheme {
+        switch themeName {
+        case "Pulse": return .pulse
+        case "Cinema": return .cinema
+        default: return .default
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -24,7 +33,8 @@ struct BasicPlaybackDemoView: View {
                         session: session,
                         videoGravity: .resizeAspect,
                         showsSubtitles: false,
-                        chrome: chrome
+                        chrome: chrome,
+                        theme: theme
                     )
                     .frame(maxWidth: .infinity)
                     .frame(height: playerHeight)
@@ -58,6 +68,17 @@ struct BasicPlaybackDemoView: View {
                                 Text("Lite").tag(PlayerChromeMode.lite)
                                 Text("Minimal").tag(PlayerChromeMode.minimal)
                                 Text("None").tag(PlayerChromeMode.none)
+                            }
+                            .pickerStyle(.segmented)
+
+                            Text("Theme")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            Picker("Theme", selection: $themeName) {
+                                Text("Default").tag("Default")
+                                Text("Pulse").tag("Pulse")
+                                Text("Cinema").tag("Cinema")
                             }
                             .pickerStyle(.segmented)
 

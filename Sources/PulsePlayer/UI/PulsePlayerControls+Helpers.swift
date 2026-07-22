@@ -116,14 +116,18 @@ extension PulsePlayerControls {
                     .font(.caption2.monospacedDigit().weight(.semibold))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(Color.white.opacity(0.12), in: Capsule())
+                    .background(Color.white.opacity(theme.chipOpacity), in: Capsule())
             }
         }
     }
 
     var bottomChromeBackground: some View {
         LinearGradient(
-            colors: [.clear, .black.opacity(0.55), .black.opacity(0.88)],
+            colors: [
+                .clear,
+                .black.opacity(theme.bottomScrimOpacity * 0.62),
+                .black.opacity(theme.bottomScrimOpacity),
+            ],
             startPoint: .top,
             endPoint: .bottom
         )
@@ -149,16 +153,25 @@ extension PulsePlayerControls {
     @ViewBuilder
     func scrubPreview(_ image: CGImage) -> some View {
         #if canImport(UIKit)
-        Image(decorative: image, scale: 1, orientation: .up)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 168, height: 94)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.45), radius: 12, y: 6)
+        VStack(spacing: 6) {
+            Image(decorative: image, scale: 1, orientation: .up)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: theme.scrubPreviewWidth, height: theme.scrubPreviewHeight)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(accent.opacity(0.55), lineWidth: 1.5)
+                )
+                .shadow(color: .black.opacity(0.45), radius: 12, y: 6)
+
+            Text(timeLabel(displayTime))
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(.ultraThinMaterial.opacity(0.9), in: Capsule())
+        }
         #endif
     }
 
@@ -166,7 +179,7 @@ extension PulsePlayerControls {
         Button(action: action) {
             Image(systemName: system)
                 .font(.system(size: size, weight: .semibold))
-                .frame(width: 34, height: 34)
+                .frame(width: theme.controlIconSize, height: theme.controlIconSize)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -214,8 +227,9 @@ extension PulsePlayerControls {
     func scheduleAutoHide() {
         hideTask?.cancel()
         guard session.isPlaying, mode != .minimal else { return }
+        let delay = theme.autoHideDelay
         hideTask = Task {
-            try? await Task.sleep(for: .seconds(3.2))
+            try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, !isScrubbing, session.isPlaying else { return }
             controlsVisible = false
         }

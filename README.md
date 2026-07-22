@@ -16,7 +16,7 @@ Not an FFmpeg media center. Not a toy `VideoPlayer` wrapper.
 | --- | --- |
 | **Product focus** | iOS 17+, iPadOS 17+, tvOS 17+ |
 | **Swift** | 6.3+ · language mode 6 · strict concurrency |
-| **Version** | `0.7.2` (`PulsePlayerInfo.version`) |
+| **Version** | `0.8.0` (`PulsePlayerInfo.version`) |
 | **Install** | SPM only — no CocoaPods / Carthage |
 
 ---
@@ -52,7 +52,7 @@ https://github.com/david2701/PulsePlayer.git
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.7.2")
+    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.8.0")
 ]
 ```
 
@@ -79,7 +79,8 @@ struct PlayerScreen: View {
         PulsePlayerView(
             session: session,
             showsSubtitles: true,
-            chrome: .full   // .full | .lite | .minimal | .none
+            chrome: .full,          // .full | .lite | .minimal | .none
+            theme: .pulse           // .default | .pulse | .cinema | custom
         )
         .aspectRatio(16 / 9, contentMode: .fit)
         .task {
@@ -124,7 +125,9 @@ session.play()
 | **Transport** | Scrubber with fixed current / duration labels, ±10s, mute, volume menu |
 | **Gestures** | Double-tap left −10s / right +10s |
 | **Tracks** | Audio + text (HLS embedded and external SRT/VTT) |
-| **Quality** | HLS ladder parse · Auto / manual peak bitrate |
+| **Quality** | HLS ladder · **hard lock** (variant playlist) · soft peak bitrate fallback |
+| **Theming** | `PlayerChromeTheme` (accent, scrims, scrub preview, auto-hide) |
+| **Scrub preview** | Thumbnail while scrubbing (when asset supports image generation) |
 | **Subtitles** | External SRT/VTT, offset, style, overlay |
 | **System** | PiP, Now Playing, audio session, AirPlay picker |
 | **Feeds** | `PlayerPool` acquire / prewarm / rebalance |
@@ -259,11 +262,12 @@ macOS is supported for `swift test` only; offline downloads are not a macOS prod
 ### Quality, tracks, playlist, live, FairPlay
 
 ```swift
-// Quality
-session.setQualityAuto()
+// Quality — hard lock reloads the media playlist when playlistURL is known
+await session.setQualityAuto()
 if let q = session.availableQualities.first {
-    session.setQuality(q)
+    await session.setQuality(q)   // isQualityHardLocked == true when locked
 }
+// Soft-only: PlayerConfiguration(preferHardQualityLock: false)
 
 // Tracks
 session.selectAudioTrack(id: audioId)
@@ -342,10 +346,10 @@ Honest scope for integrators evaluating the package:
 
 | Topic | Status |
 | --- | --- |
-| Forced HLS variant lock via resource loader | Partial (peak bitrate) |
 | Native HLS interstitial ad parse | Host `AdCue` plugin only |
-| Dedicated tvOS sample app | API + chrome hooks; demo is iOS-first |
-| DocC catalog site | Planned |
+| Dedicated tvOS sample app | API + chrome hooks; demo is iOS-first (0.9) |
+| DocC hosted site | Catalog scaffold in package; publish in 0.9 |
+| Real AV integration tests | Mock engine today; 1.0 |
 | FairPlay end-to-end without Apple FPS package | Not possible publicly |
 
 ---

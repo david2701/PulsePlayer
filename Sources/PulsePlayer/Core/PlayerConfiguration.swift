@@ -17,6 +17,9 @@ public struct PlayerConfiguration: Sendable, Equatable {
     public var preferredPeakBitRate: Double
     public var preferredMaximumResolution: CGSize
     public var canUseNetworkResourcesForLiveStreamingWhilePaused: Bool
+    /// When true (default), manual quality selection reloads the HLS **media playlist**
+    /// for a hard lock. Soft peak-bitrate caps still apply as a fallback.
+    public var preferHardQualityLock: Bool
 
     public var retry: RetryPolicy
     public var stall: StallPolicy
@@ -37,6 +40,7 @@ public struct PlayerConfiguration: Sendable, Equatable {
         preferredPeakBitRate: Double = 0,
         preferredMaximumResolution: CGSize = .zero,
         canUseNetworkResourcesForLiveStreamingWhilePaused: Bool = false,
+        preferHardQualityLock: Bool = true,
         retry: RetryPolicy = .default,
         stall: StallPolicy = .default,
         positionUpdateInterval: TimeInterval = 0.1,
@@ -54,6 +58,7 @@ public struct PlayerConfiguration: Sendable, Equatable {
         self.preferredPeakBitRate = preferredPeakBitRate
         self.preferredMaximumResolution = preferredMaximumResolution
         self.canUseNetworkResourcesForLiveStreamingWhilePaused = canUseNetworkResourcesForLiveStreamingWhilePaused
+        self.preferHardQualityLock = preferHardQualityLock
         self.retry = retry
         self.stall = stall
         self.positionUpdateInterval = positionUpdateInterval

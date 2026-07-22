@@ -61,7 +61,10 @@ extension PulsePlayerControls {
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
                     Spacer(minLength: 0)
-                    if let image = session.scrubPreviewImage, isScrubbing {
+                    if theme.showsScrubPreview,
+                       let image = session.scrubPreviewImage,
+                       isScrubbing
+                    {
                         scrubPreview(image).padding(.bottom, 8)
                     }
                     if controlsVisible {
@@ -97,7 +100,7 @@ extension PulsePlayerControls {
         .padding(.bottom, 16)
         .background(
             LinearGradient(
-                colors: [.black.opacity(0.65), .clear],
+                colors: [.black.opacity(theme.topScrimOpacity), .clear],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -113,7 +116,7 @@ extension PulsePlayerControls {
                     session.togglePlayPause(); bumpChrome()
                 }
                 Spacer(minLength: 0)
-                bitrateChip
+                if theme.showsBitrateChip { bitrateChip }
                 controlButton(muteIcon, size: 15) {
                     session.toggleMute(); bumpChrome()
                 }
@@ -143,7 +146,7 @@ extension PulsePlayerControls {
                     liveEdgeButton
                 }
 
-                bitrateChip
+                if theme.showsBitrateChip { bitrateChip }
 
                 Menu {
                     Button {
