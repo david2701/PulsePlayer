@@ -13,85 +13,60 @@ struct SubtitlesDemoView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
+            GeometryReader { geo in
+                let playerHeight = min(geo.size.width * 9 / 16, geo.size.height * 0.38)
+                VStack(spacing: 0) {
                     PulsePlayerView(
                         session: session,
+                        videoGravity: .resizeAspect,
                         showsSubtitles: true,
-                        showsControls: true
+                        chrome: .full
                     )
                     .frame(maxWidth: .infinity)
-                    .aspectRatio(16 / 9, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .padding(.horizontal, 16)
+                    .frame(height: playerHeight)
+                    .background(Color.black)
 
-                    GroupBox("Active cue") {
-                        Text(session.currentSubtitleText ?? "—")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .font(.body.weight(.medium))
-                    }
-                    .padding(.horizontal, 16)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            GroupBox("Active cue") {
+                                Text(session.currentSubtitleText ?? "—")
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
 
-                    GroupBox("Track") {
-                        Toggle("Subtitles enabled", isOn: Binding(
-                            get: { session.subtitlesEnabled },
-                            set: { session.setSubtitlesEnabled($0) }
-                        ))
-                        if !session.subtitleTracks.isEmpty {
-                            Picker("Track", selection: Binding(
-                                get: { session.activeSubtitleTrackID ?? "" },
-                                set: { session.selectSubtitle(id: $0.isEmpty ? nil : $0) }
-                            )) {
-                                Text("Off").tag("")
-                                ForEach(session.subtitleTracks) { track in
-                                    Text(track.label ?? track.id).tag(track.id)
+                            GroupBox("Track") {
+                                Toggle("Enabled", isOn: Binding(
+                                    get: { session.subtitlesEnabled },
+                                    set: { session.setSubtitlesEnabled($0) }
+                                ))
+                                Text(message)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            GroupBox("Timing & style") {
+                                sliderRow("Offset s", value: $offset, range: -5...5) {
+                                    session.setSubtitleOffset($0, trackID: "en")
                                 }
+                                sliderRow("Font", value: $fontSize, range: 12...28) { _ in
+                                    applyStyle()
+                                }
+                                sliderRow("Background", value: $bgOpacity, range: 0...0.9) { _ in
+                                    applyStyle()
+                                }
+                                Picker("Position", selection: $position) {
+                                    Text("Top").tag(SubtitleVerticalPosition.top)
+                                    Text("Center").tag(SubtitleVerticalPosition.center)
+                                    Text("Bottom").tag(SubtitleVerticalPosition.bottom)
+                                }
+                                .pickerStyle(.segmented)
+                                .onChange(of: position) { _, _ in applyStyle() }
                             }
                         }
-                        Text(message)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        .padding(16)
                     }
-                    .padding(.horizontal, 16)
-
-                    GroupBox("Timing & style") {
-                        labeledSlider("Offset s", value: $offset, range: -5...5) { value in
-                            session.setSubtitleOffset(value, trackID: "en")
-                        }
-                        labeledSlider("Font size", value: $fontSize, range: 12...28) { _ in
-                            applyStyle()
-                        }
-                        labeledSlider("Background", value: $bgOpacity, range: 0...0.9) { _ in
-                            applyStyle()
-                        }
-                        Picker("Position", selection: $position) {
-                            Text("Top").tag(SubtitleVerticalPosition.top)
-                            Text("Center").tag(SubtitleVerticalPosition.center)
-                            Text("Bottom").tag(SubtitleVerticalPosition.bottom)
-                        }
-                        .pickerStyle(.segmented)
-                        .onChange(of: position) { _, _ in applyStyle() }
-
-                        HStack {
-                            Button("Default style") {
-                                fontSize = 17
-                                bgOpacity = 0.55
-                                position = .bottom
-                                applyStyle()
-                            }
-                            Button("Large") {
-                                fontSize = 22
-                                bgOpacity = 0.7
-                                applyStyle()
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                    .padding(.horizontal, 16)
                 }
-                .padding(.bottom, 24)
             }
-            .background(Color.black.ignoresSafeArea())
+            .background(Color(.systemBackground))
             .navigationTitle("Subtitles")
             .navigationBarTitleDisplayMode(.inline)
             .task { await bootstrap() }
@@ -112,11 +87,11 @@ struct SubtitlesDemoView: View {
                 format: .srt,
                 select: true
             )
-            message = "\(track.cues.count) cues · scrub to verify sync"
+            message = "\(track.cues.count) cues — scrub to verify sync"
             applyStyle()
             session.play()
         } catch {
-            message = "Error: \(error.localizedDescription)"
+            message = error.localizedDescription
         }
     }
 
@@ -125,12 +100,13 @@ struct SubtitlesDemoView: View {
             SubtitleStyle(
                 fontSize: fontSize,
                 backgroundOpacity: bgOpacity,
+                edgeInset: 72,
                 position: position
             )
         )
     }
 
-    private func labeledSlider(
+    private func sliderRow(
         _ title: String,
         value: Binding<Double>,
         range: ClosedRange<Double>,
@@ -140,10 +116,13 @@ struct SubtitlesDemoView: View {
             Text("\(title): \(String(format: "%.1f", value.wrappedValue))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Slider(value: Binding(
-                get: { value.wrappedValue },
-                set: { value.wrappedValue = $0; onChange($0) }
-            ), in: range)
+            Slider(
+                value: Binding(
+                    get: { value.wrappedValue },
+                    set: { value.wrappedValue = $0; onChange($0) }
+                ),
+                in: range
+            )
         }
     }
 }

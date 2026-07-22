@@ -31,6 +31,9 @@ public final class PlayerSession: Identifiable {
 
     public var isMuted: Bool { configuration.isMuted }
 
+    /// True after first displayable frame (or headless time advance).
+    public var hasRenderedFrame: Bool { didEmitFirstFrame }
+
     /// External subtitle tracks (SRT/VTT).
     public internal(set) var subtitleTracks: [SubtitleTrack] = []
     public internal(set) var activeSubtitleTrackID: String?

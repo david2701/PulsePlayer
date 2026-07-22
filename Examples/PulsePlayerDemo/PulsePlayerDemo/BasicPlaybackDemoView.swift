@@ -10,78 +10,92 @@ struct BasicPlaybackDemoView: View {
             updatesNowPlayingInfo: true
         )
     )
+    @State private var chrome: PlayerChromeMode = .full
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
+            GeometryReader { geo in
+                let playerHeight = min(geo.size.width * 9 / 16, geo.size.height * 0.42)
 
                 VStack(spacing: 0) {
                     PulsePlayerView(
                         session: session,
+                        videoGravity: .resizeAspect,
                         showsSubtitles: false,
-                        showsControls: true
+                        chrome: chrome
                     )
                     .frame(maxWidth: .infinity)
-                    .aspectRatio(16 / 9, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
+                    .frame(height: playerHeight)
+                    .background(Color.black)
 
-                    metaPanel
-                    Spacer(minLength: 0)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            HStack {
+                                statusChip
+                                Spacer()
+                                if session.isPictureInPicturePossible {
+                                    Button {
+                                        session.startPictureInPicture()
+                                    } label: {
+                                        Label("PiP", systemImage: "pip.enter")
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+
+                            Text(session.currentSource?.title ?? "No source")
+                                .font(.title3.bold())
+
+                            Text("Chrome mode")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            Picker("Chrome", selection: $chrome) {
+                                Text("Full").tag(PlayerChromeMode.full)
+                                Text("Lite").tag(PlayerChromeMode.lite)
+                                Text("Minimal").tag(PlayerChromeMode.minimal)
+                                Text("None").tag(PlayerChromeMode.none)
+                            }
+                            .pickerStyle(.segmented)
+
+                            Text(helpText)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(16)
+                    }
                 }
             }
+            .background(Color(.systemBackground))
             .navigationTitle("Playback")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu("Source") {
                         Button("BipBop HLS") {
-                            Task { await load(DemoMedia.bipbopHLS, title: "BipBop HLS") }
+                            Task { await load(DemoMedia.bipbopHLS, "BipBop HLS") }
                         }
                         Button("Big Buck Bunny") {
-                            Task { await load(DemoMedia.bigBuckBunnyMP4, title: "Big Buck Bunny") }
+                            Task { await load(DemoMedia.bigBuckBunnyMP4, "Big Buck Bunny") }
                         }
                         Button("Elephants Dream") {
-                            Task { await load(DemoMedia.elephantsDreamMP4, title: "Elephants Dream") }
+                            Task { await load(DemoMedia.elephantsDreamMP4, "Elephants Dream") }
                         }
                     }
                 }
             }
-            .task { await load(DemoMedia.bipbopHLS, title: "BipBop HLS") }
+            .task { await load(DemoMedia.bigBuckBunnyMP4, "Big Buck Bunny") }
             .onDisappear { session.pause() }
         }
     }
 
-    private var metaPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                statusChip
-                Spacer()
-                if session.isPictureInPicturePossible {
-                    Button {
-                        session.startPictureInPicture()
-                    } label: {
-                        Label("PiP", systemImage: "pip.enter")
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-
-            Text(session.currentSource?.title ?? "No source")
-                .font(.headline)
-
-            Text("Tap video for chrome · drag scrubber to seek · volume on the right")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+    private var helpText: String {
+        switch chrome {
+        case .none: return "Surface only — host builds UI."
+        case .minimal: return "Tap center play/pause · mute corner."
+        case .lite: return "Scrubber + play + time + mute."
+        case .full: return "Full transport: scrub, ±10s, volume."
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
     }
 
     private var statusChip: some View {
@@ -89,10 +103,10 @@ struct BasicPlaybackDemoView: View {
             .font(.caption2.weight(.bold).monospaced())
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(Color.white.opacity(0.1), in: Capsule())
+            .background(Color.secondary.opacity(0.15), in: Capsule())
     }
 
-    private func load(_ url: URL, title: String) async {
+    private func load(_ url: URL, _ title: String) async {
         await session.load(DemoMedia.source(url: url, id: title, title: title))
         session.play()
     }

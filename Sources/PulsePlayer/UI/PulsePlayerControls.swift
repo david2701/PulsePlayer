@@ -1,22 +1,9 @@
 import SwiftUI
 
-/// Transport chrome: play/pause, interactive scrubber, time, mute, volume, ±skip.
+/// Transport chrome rendered according to `PlayerChromeMode`.
 public struct PulsePlayerControls: View {
-    public struct Style {
-        public var showsVolumeSlider: Bool
-        public var skipInterval: TimeInterval
-
-        public init(
-            showsVolumeSlider: Bool = true,
-            skipInterval: TimeInterval = 10
-        ) {
-            self.showsVolumeSlider = showsVolumeSlider
-            self.skipInterval = skipInterval
-        }
-    }
-
     private let session: PlayerSession
-    private let style: Style
+    private let mode: PlayerChromeMode
     private let accent: Color
 
     @State private var isScrubbing = false
@@ -26,17 +13,68 @@ public struct PulsePlayerControls: View {
 
     public init(
         session: PlayerSession,
-        style: Style = Style(),
+        mode: PlayerChromeMode = .full,
         accent: Color = .white
     ) {
         self.session = session
-        self.style = style
+        self.mode = mode
         self.accent = accent
     }
 
     public var body: some View {
+        Group {
+            switch mode {
+            case .none:
+                EmptyView()
+            case .minimal:
+                minimalChrome
+            case .lite:
+                interactiveChrome { liteBar }
+            case .full:
+                interactiveChrome { fullBar }
+            }
+        }
+        .foregroundStyle(accent)
+    }
+
+    // MARK: - Minimal (feed)
+
+    private var minimalChrome: some View {
         ZStack {
-            // Tap surface to toggle chrome.
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { session.togglePlayPause() }
+
+            if !session.isPlaying {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 44, weight: .bold))
+                    .foregroundStyle(.white)
+                    .shadow(radius: 8)
+                    .allowsHitTesting(false)
+            }
+
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Button {
+                        session.toggleMute()
+                    } label: {
+                        Image(systemName: muteIcon)
+                            .font(.body.weight(.semibold))
+                            .padding(12)
+                            .background(.black.opacity(0.45), in: Circle())
+                    }
+                    .padding(16)
+                }
+            }
+        }
+    }
+
+    // MARK: - Interactive shells
+
+    private func interactiveChrome<Bar: View>(@ViewBuilder bar: @escaping () -> Bar) -> some View {
+        ZStack {
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture { toggleChrome() }
@@ -44,7 +82,7 @@ public struct PulsePlayerControls: View {
             VStack(spacing: 0) {
                 Spacer()
                 if controlsVisible {
-                    chrome
+                    bar()
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -56,111 +94,118 @@ public struct PulsePlayerControls: View {
         }
     }
 
-    private var chrome: some View {
-        VStack(spacing: 10) {
+    private var liteBar: some View {
+        VStack(spacing: 8) {
             scrubber
-            HStack(spacing: 16) {
-                Button {
-                    session.togglePlayPause()
-                    bumpChrome()
-                } label: {
-                    Image(systemName: session.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.title2)
-                        .frame(width: 36, height: 36)
-                }
-
-                Button {
-                    Task { await session.seek(relative: -style.skipInterval) }
-                    bumpChrome()
-                } label: {
-                    Image(systemName: "gobackward.10")
-                        .font(.body.weight(.semibold))
-                }
-
-                Button {
-                    Task { await session.seek(relative: style.skipInterval) }
-                    bumpChrome()
-                } label: {
-                    Image(systemName: "goforward.10")
-                        .font(.body.weight(.semibold))
-                }
-
-                Text(timeLabel(displayTime))
+            HStack(spacing: 14) {
+                playButton
+                Text(timePairLabel)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.white.opacity(0.9))
-
-                Text(timeLabel(session.playbackDuration ?? 0))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.55))
-
-                Spacer(minLength: 8)
-
-                Button {
-                    session.toggleMute()
-                    bumpChrome()
-                } label: {
+                Spacer()
+                Button { session.toggleMute(); bumpChrome() } label: {
                     Image(systemName: muteIcon)
-                        .font(.body.weight(.semibold))
-                }
-
-                if style.showsVolumeSlider {
-                    Slider(
-                        value: Binding(
-                            get: { Double(session.volume) },
-                            set: { session.setVolume(Float($0)); bumpChrome() }
-                        ),
-                        in: 0...1
-                    )
-                    .frame(width: 88)
-                    .tint(accent)
                 }
             }
         }
-        .foregroundStyle(accent)
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.75)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .background(barBackground)
+    }
+
+    private var fullBar: some View {
+        VStack(spacing: 10) {
+            scrubber
+            HStack(spacing: 14) {
+                playButton
+                skipButton(-10, system: "gobackward.10")
+                skipButton(10, system: "goforward.10")
+                Text(timePairLabel)
+                    .font(.caption.monospacedDigit())
+                Spacer(minLength: 4)
+                Button { session.toggleMute(); bumpChrome() } label: {
+                    Image(systemName: muteIcon)
+                }
+                Slider(
+                    value: Binding(
+                        get: { Double(session.volume) },
+                        set: { session.setVolume(Float($0)); bumpChrome() }
+                    ),
+                    in: 0...1
+                )
+                .frame(maxWidth: 100)
+                .tint(accent)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(barBackground)
+    }
+
+    private var playButton: some View {
+        Button {
+            session.togglePlayPause()
+            bumpChrome()
+        } label: {
+            Image(systemName: session.isPlaying ? "pause.fill" : "play.fill")
+                .font(.title3)
+                .frame(width: 32, height: 32)
+        }
+    }
+
+    private func skipButton(_ delta: TimeInterval, system: String) -> some View {
+        Button {
+            Task { await session.seek(relative: delta) }
+            bumpChrome()
+        } label: {
+            Image(systemName: system)
+                .font(.body.weight(.semibold))
+        }
     }
 
     private var scrubber: some View {
         let duration = max(session.playbackDuration ?? 0, 0.001)
         let value = isScrubbing ? scrubTime : session.playbackTime
-        return VStack(spacing: 4) {
-            Slider(
-                value: Binding(
-                    get: { min(max(0, value), duration) },
-                    set: { newValue in
-                        if !isScrubbing {
-                            isScrubbing = true
-                            session.beginScrub()
-                        }
-                        scrubTime = newValue
-                        session.updateScrub(time: newValue)
-                        bumpChrome()
-                    }
-                ),
-                in: 0...duration,
-                onEditingChanged: { editing in
-                    if editing {
+        return Slider(
+            value: Binding(
+                get: { min(max(0, value), duration) },
+                set: { newValue in
+                    if !isScrubbing {
                         isScrubbing = true
-                        scrubTime = session.playbackTime
                         session.beginScrub()
-                    } else {
-                        let t = scrubTime
-                        isScrubbing = false
-                        Task { await session.endScrub(commit: t) }
                     }
+                    scrubTime = newValue
+                    session.updateScrub(time: newValue)
                     bumpChrome()
                 }
-            )
-            .tint(accent)
-        }
+            ),
+            in: 0...duration,
+            onEditingChanged: { editing in
+                if editing {
+                    isScrubbing = true
+                    scrubTime = session.playbackTime
+                    session.beginScrub()
+                } else {
+                    let t = scrubTime
+                    isScrubbing = false
+                    Task { await session.endScrub(commit: t) }
+                }
+                bumpChrome()
+            }
+        )
+        .tint(accent)
+    }
+
+    private var barBackground: some View {
+        LinearGradient(
+            colors: [.clear, .black.opacity(0.82)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var timePairLabel: String {
+        "\(timeLabel(displayTime)) / \(timeLabel(session.playbackDuration ?? 0))"
     }
 
     private var displayTime: TimeInterval {
@@ -169,9 +214,8 @@ public struct PulsePlayerControls: View {
 
     private var muteIcon: String {
         if session.isMuted || session.volume < 0.01 { return "speaker.slash.fill" }
-        if session.volume < 0.4 { return "speaker.wave.1.fill" }
-        if session.volume < 0.75 { return "speaker.wave.2.fill" }
-        return "speaker.wave.3.fill"
+        if session.volume < 0.45 { return "speaker.wave.1.fill" }
+        return "speaker.wave.2.fill"
     }
 
     private func toggleChrome() {
@@ -186,7 +230,7 @@ public struct PulsePlayerControls: View {
 
     private func scheduleAutoHide() {
         hideTask?.cancel()
-        guard session.isPlaying else { return }
+        guard session.isPlaying, mode != .minimal else { return }
         hideTask = Task {
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled, !isScrubbing, session.isPlaying else { return }
@@ -195,12 +239,10 @@ public struct PulsePlayerControls: View {
     }
 
     private func timeLabel(_ t: TimeInterval) -> String {
-        guard t.isFinite else { return "0:00" }
-        let total = max(0, Int(t.rounded()))
-        let h = total / 3600
-        let m = (total % 3600) / 60
+        guard t.isFinite, t >= 0 else { return "0:00" }
+        let total = Int(t.rounded(.down))
+        let m = total / 60
         let s = total % 60
-        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
         return String(format: "%d:%02d", m, s)
     }
 }

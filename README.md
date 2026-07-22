@@ -24,7 +24,7 @@ Focus: **stable lifecycle**, **typed state**, **QoE events**, **easy SPM integra
 | System | Picture in Picture, Now Playing, audio session |
 | Feeds | `PlayerPool` — prewarm / rebalance for vertical lists |
 | Subtitles | External **SRT / WebVTT**, offset, style, enable/disable, overlay |
-| Controls | Built-in chrome: **play/pause, scrub/seek, skip, mute, volume** |
+| Controls | Chrome modes: **`none` / `minimal` / `lite` / `full`** |
 | Offline | **HLS/progressive download** (iOS/tvOS) → play from local asset |
 
 ## Install
@@ -38,7 +38,7 @@ Focus: **stable lifecycle**, **typed state**, **QoE events**, **easy SPM integra
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.4.1")
+    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.5.0")
 ]
 ```
 
@@ -58,8 +58,8 @@ struct PlayerScreen: View {
     )
 
     var body: some View {
-        // showsControls: play/pause · scrubber · skip · mute · volume
-        PulsePlayerView(session: session, showsSubtitles: true, showsControls: true)
+        // chrome: .full | .lite | .minimal | .none
+        PulsePlayerView(session: session, showsSubtitles: true, chrome: .full)
             .aspectRatio(16/9, contentMode: .fit)
             .task {
                 let url = URL(string: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8")!
@@ -154,15 +154,19 @@ session.applySubtitleStyle(.large) // or custom SubtitleStyle
 // session.currentSubtitleText + playbackTime drive the overlay
 ```
 
-## Built-in controls
+## Chrome modes
+
+| Mode | Use case | UI |
+| --- | --- | --- |
+| `.none` | Custom host UI | Surface only |
+| `.minimal` | Vertical feed / stories | Tap play/pause, mute |
+| `.lite` | Inline cards | Scrub + play + time |
+| `.full` | Detail / offline | Full transport + volume |
 
 ```swift
-PulsePlayerView(session: session, showsControls: true)
-// or
-PulsePlayerControls(session: session)
+PulsePlayerView(session: session, chrome: .full)   // detail
+PulsePlayerView(session: session, chrome: .minimal) // feed
 ```
-
-Uses observed `playbackTime` / `playbackDuration` so the scrubber seeks for real (not a decorative progress bar).
 
 ## Offline downloads (iOS / tvOS)
 
@@ -201,7 +205,7 @@ swift test
 
 ## Version
 
-`PulsePlayerInfo.version` → **0.4.1**
+`PulsePlayerInfo.version` → **0.5.0**
 
 ## License
 

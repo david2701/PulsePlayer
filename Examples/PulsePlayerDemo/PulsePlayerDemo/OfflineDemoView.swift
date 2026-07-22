@@ -6,100 +6,80 @@ struct OfflineDemoView: View {
         configuration: PlayerConfiguration(autoplay: false, isMuted: false)
     )
     @State private var items: [OfflineDownloadItem] = []
-    @State private var message = "Download on device/simulator, then play with full controls."
+    @State private var message = "Download, then play with full controls."
     @State private var isEnqueueing = false
 
     private let downloadID = "demo-bipbop"
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
+            GeometryReader { geo in
+                let playerHeight = min(geo.size.width * 9 / 16, geo.size.height * 0.38)
+                VStack(spacing: 0) {
                     PulsePlayerView(
                         session: session,
+                        videoGravity: .resizeAspect,
                         showsSubtitles: false,
-                        showsControls: true
+                        chrome: .full
                     )
                     .frame(maxWidth: .infinity)
-                    .aspectRatio(16 / 9, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .padding(.horizontal, 16)
+                    .frame(height: playerHeight)
+                    .background(Color.black)
 
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-
-                    GroupBox("Downloads") {
-                        if items.isEmpty {
-                            Text("No items")
+                    List {
+                        Section("Status") {
+                            Text(message)
+                                .font(.footnote)
                                 .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(items) { item in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack {
-                                        Text(item.title ?? item.id)
-                                            .font(.subheadline.weight(.semibold))
-                                        Spacer()
-                                        Text(item.state.rawValue)
-                                            .font(.caption.monospaced())
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    ProgressView(value: item.progress)
-                                    if let err = item.errorMessage {
-                                        Text(err)
-                                            .font(.caption2)
-                                            .foregroundStyle(.red)
+                        }
+                        Section("Catalog") {
+                            if items.isEmpty {
+                                Text("No downloads")
+                            } else {
+                                ForEach(items) { item in
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HStack {
+                                            Text(item.title ?? item.id)
+                                            Spacer()
+                                            Text(item.state.rawValue)
+                                                .font(.caption.monospaced())
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        ProgressView(value: item.progress)
                                     }
                                 }
-                                .padding(.vertical, 4)
+                            }
+                        }
+                        Section {
+                            Button {
+                                Task { await enqueue() }
+                            } label: {
+                                Label(
+                                    isEnqueueing ? "Starting…" : "Download BipBop HLS",
+                                    systemImage: "arrow.down.circle"
+                                )
+                            }
+                            .disabled(isEnqueueing)
+
+                            Button {
+                                Task { await playOffline() }
+                            } label: {
+                                Label("Play offline", systemImage: "play.circle")
+                            }
+
+                            Button("Remove", role: .destructive) {
+                                removeDownload()
                             }
                         }
                     }
-                    .padding(.horizontal, 16)
-
-                    VStack(spacing: 10) {
-                        Button {
-                            Task { await enqueue() }
-                        } label: {
-                            Label(
-                                isEnqueueing ? "Starting…" : "Download BipBop HLS",
-                                systemImage: "arrow.down.circle.fill"
-                            )
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isEnqueueing)
-
-                        Button {
-                            Task { await playOffline() }
-                        } label: {
-                            Label("Play offline asset", systemImage: "play.circle.fill")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button(role: .destructive) {
-                            removeDownload()
-                        } label: {
-                            Label("Remove download", systemImage: "trash")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                    .padding(.horizontal, 16)
+                    .listStyle(.insetGrouped)
                 }
-                .padding(.bottom, 24)
             }
-            .background(Color.black.ignoresSafeArea())
             .navigationTitle("Offline")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 refresh()
-                OfflineDownloadManager.shared.onChange = { list in
-                    items = list
-                }
+                OfflineDownloadManager.shared.onChange = { items = $0 }
             }
             .onDisappear { session.pause() }
         }
@@ -118,31 +98,26 @@ struct OfflineDemoView: View {
                 id: downloadID,
                 title: "BipBop offline"
             )
-            message = "Download enqueued — watch progress below"
+            message = "Downloading…"
             refresh()
         } catch {
-            message = "Enqueue failed: \(error.localizedDescription)"
+            message = error.localizedDescription
         }
     }
 
     private func playOffline() async {
         guard let source = OfflineDownloadManager.shared.playableSource(id: downloadID) else {
-            let state = OfflineDownloadManager.shared.item(id: downloadID)?.state.rawValue ?? "none"
-            message = "Not ready (state: \(state)). Wait until completed."
+            message = "Not ready yet"
             return
         }
         await session.load(source)
         session.play()
-        message = "Playing offline — use on-video controls to seek / pause / volume"
+        message = "Playing offline"
     }
 
     private func removeDownload() {
-        do {
-            try OfflineDownloadManager.shared.remove(id: downloadID)
-            message = "Removed"
-            refresh()
-        } catch {
-            message = "Remove failed: \(error.localizedDescription)"
-        }
+        try? OfflineDownloadManager.shared.remove(id: downloadID)
+        message = "Removed"
+        refresh()
     }
 }
