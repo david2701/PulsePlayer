@@ -5,10 +5,13 @@ Living-room sample for **tvOS 17+** using local PulsePlayer.
 ## Features
 
 - Horizontal catalog with focus rings (Siri Remote)
-- Full-screen player + `onPlayPauseCommand`
-- Focusable transport (`PulsePlayerTVControls`)
-- Quality menu (hard lock when variants are known)
-- Cinema theme, content-first layout
+- The package's shared adaptive `.full` chrome (no demo-only transport)
+- Siri Remote play/pause, focused center transport and directional seek
+- Quality, tracks, speed and volume menu
+- Ordered origin fallbacks and production performance budgets
+- Native client interstitial with eligible skip
+- Chapters, skip intro/credits and Up Next
+- Pulse theme, content-first layout
 
 ## Run
 
@@ -35,7 +38,8 @@ xcodebuild \
 | Input | Action |
 | --- | --- |
 | Play/Pause | Toggle playback |
-| Select on transport | Skip ±10s / play-pause |
+| Select on center transport | Skip ±10s / play-pause |
+| Left/right on timeline | Seek ±10s |
 | Menu | System back / exit |
 | Focus + Select on catalog | Open stream |
 

@@ -8,6 +8,10 @@ struct OfflineDemoView: View {
     @State private var items: [OfflineDownloadItem] = []
     @State private var message = "Resume-or-enqueue · storage quota · full chrome playback"
     @State private var isBusy = false
+    @State private var certURL = ""
+    @State private var licenseURL = ""
+    @State private var encryptedAssetURL = ""
+    @State private var contentKeyID = "offline-asset-1"
 
     private let downloadID = "demo-bipbop"
 
@@ -83,6 +87,37 @@ struct OfflineDemoView: View {
                             }
                         }
 
+                        Section("Protected offline (FairPlay)") {
+                            Text(
+                                "Uses a real FPS certificate, CKC server and persistable key store. Public test credentials do not exist."
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                            TextField("Certificate URL", text: $certURL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                            TextField("License URL", text: $licenseURL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                            TextField("Encrypted HLS URL", text: $encryptedAssetURL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                            TextField("Content key asset id", text: $contentKeyID)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+
+                            Button {
+                                enqueueProtected()
+                            } label: {
+                                Label(
+                                    "Download protected asset",
+                                    systemImage: "lock.circle"
+                                )
+                            }
+                            .disabled(isBusy)
+                        }
+
                         Section {
                             Button {
                                 Task { await enqueue() }
@@ -95,9 +130,13 @@ struct OfflineDemoView: View {
                             .disabled(isBusy)
 
                             Button("Enforce storage limit") {
-                                try? OfflineDownloadManager.shared.enforceStorageLimit()
-                                refresh()
-                                message = "Storage enforced · \(OfflineDownloadManager.shared.usedStorageDisplay)"
+                                do {
+                                    try OfflineDownloadManager.shared.enforceStorageLimit()
+                                    refresh()
+                                    message = "Storage enforced · \(OfflineDownloadManager.shared.usedStorageDisplay)"
+                                } catch {
+                                    message = error.localizedDescription
+                                }
                             }
                         }
                     }
@@ -143,6 +182,45 @@ struct OfflineDemoView: View {
         }
     }
 
+    private func enqueueProtected() {
+        guard let certificate = URL(string: certURL),
+              let license = URL(string: licenseURL),
+              let asset = URL(string: encryptedAssetURL),
+              !contentKeyID.isEmpty
+        else {
+            message = "Fill certificate, license, encrypted HLS and content key id"
+            return
+        }
+
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let provider = HTTPContentKeyProvider(
+                configuration: .init(
+                    certificateURL: certificate,
+                    licenseURL: license,
+                    licenseBody: .jsonBase64SPC
+                )
+            )
+            let keyStore = try PersistableContentKeyFileStore()
+            session.contentKeyProvider = provider
+            session.persistableContentKeyStore = keyStore
+            OfflineDownloadManager.shared.contentKeyProvider = provider
+            OfflineDownloadManager.shared.persistableContentKeyStore = keyStore
+
+            let item = try OfflineDownloadManager.shared.enqueue(
+                sourceURL: asset,
+                id: "fairplay-\(contentKeyID)",
+                title: "Protected FairPlay asset",
+                contentKeyAssetId: contentKeyID
+            )
+            message = "Protected download: \(item.state.rawValue)"
+            refresh()
+        } catch {
+            message = error.localizedDescription
+        }
+    }
+
     private func play(id: String) async {
         guard let source = OfflineDownloadManager.shared.playableSource(id: id) else {
             message = "Not playable yet"
@@ -164,8 +242,12 @@ struct OfflineDemoView: View {
     }
 
     private func remove(id: String) {
-        try? OfflineDownloadManager.shared.remove(id: id)
-        message = "Removed"
-        refresh()
+        do {
+            try OfflineDownloadManager.shared.remove(id: id)
+            message = "Removed"
+            refresh()
+        } catch {
+            message = error.localizedDescription
+        }
     }
 }

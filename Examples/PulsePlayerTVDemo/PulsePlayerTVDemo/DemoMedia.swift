@@ -21,7 +21,54 @@ enum DemoMedia {
     ]
 
     static func source(from item: CatalogItem) -> MediaSource {
-        MediaSource(id: item.id, url: item.url, title: item.title, subtitle: item.subtitle)
+        MediaSource(
+            id: item.id,
+            url: item.url,
+            fallbackURLs: catalog
+                .map(\.url)
+                .filter { $0 != item.url },
+            title: item.title,
+            subtitle: item.subtitle,
+            interstitials: item.id == "adv"
+                ? [
+                    InterstitialDescriptor(
+                        id: "pulse-demo-midroll",
+                        time: 12,
+                        assetURLs: [bipbop4x3],
+                        playoutLimit: 6,
+                        skipAfter: 3
+                    ),
+                ]
+                : [],
+            editorialMarkers: [
+                EditorialMarker(
+                    id: "\(item.id)-intro",
+                    kind: .intro,
+                    title: "Intro",
+                    start: 2,
+                    end: 6
+                ),
+                EditorialMarker(
+                    id: "\(item.id)-chapter",
+                    kind: .chapter,
+                    title: "Main chapter",
+                    start: 6,
+                    end: 24
+                ),
+                EditorialMarker(
+                    id: "\(item.id)-credits",
+                    kind: .credits,
+                    title: "Credits",
+                    start: 24,
+                    end: 30
+                ),
+            ]
+        )
+    }
+
+    static func next(after item: CatalogItem) -> CatalogItem? {
+        guard let index = catalog.firstIndex(of: item) else { return nil }
+        return catalog.indices.contains(index + 1) ? catalog[index + 1] : nil
     }
 }
 

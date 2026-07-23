@@ -7,8 +7,11 @@ iOS app that exercises the local `PulsePlayer` package.
 1. **Play** — HLS, chrome modes, seek, PiP
 2. **Subs** — external SRT, style, offset
 3. **Feed** — vertical paging + `PlayerPool` + minimal chrome
-4. **Pro** — playlist queue, quality, tracks, FairPlay HTTP wiring
-5. **Offline** — download / retry / play local
+4. **Pro** — queue, native interstitial, editorial/Up Next, origin fallback,
+   quality, production event cockpit, performance budgets and FairPlay HTTP
+   wiring
+5. **Offline** — download / retry / play local, plus real persistable FairPlay
+   wiring for protected offline assets
 
 ## FairPlay: can you test without a mock?
 
@@ -44,3 +47,7 @@ xcrun simctl launch booted com.pulseplayer.demo
 ```
 
 Needs network for sample streams.
+
+The embedded player uses the compact full chrome. Presenting it full-screen
+automatically switches to the cinematic center transport; no demo-only player
+UI is involved.

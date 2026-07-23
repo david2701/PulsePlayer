@@ -3,21 +3,20 @@ import SwiftUI
 
 /// Quality, tracks, playlist queue, continue watching, FairPlay wiring.
 struct AdvancedDemoView: View {
-    @State private var session = PlayerSession(
-        configuration: PlayerConfiguration(autoplay: true, isMuted: false)
-    )
+    @State private var session = Self.makeSession()
     @State private var queue = PlaybackQueue(items: [], autoplayNext: true)
     @State private var message = ""
+    @State private var productionEvents: [String] = []
     @State private var certURL = ""
     @State private var licenseURL = ""
     @State private var drmAssetURL = ""
     @State private var contentId = "asset-1"
 
     private let episodes: [MediaSource] = [
-        MediaSource(id: "adv", url: DemoMedia.bipbopAdvanced, title: "1 · Advanced"),
-        MediaSource(id: "16x9", url: DemoMedia.bipbop16x9, title: "2 · 16:9"),
-        MediaSource(id: "4x3", url: DemoMedia.bipbop4x3, title: "3 · 4:3"),
-        MediaSource(id: "basic", url: DemoMedia.bipbopBasic, title: "4 · Basic"),
+        Self.episode(id: "adv", url: DemoMedia.bipbopAdvanced, title: "1 · Advanced"),
+        Self.episode(id: "16x9", url: DemoMedia.bipbop16x9, title: "2 · 16:9"),
+        Self.episode(id: "4x3", url: DemoMedia.bipbop4x3, title: "3 · 4:3"),
+        Self.episode(id: "basic", url: DemoMedia.bipbopBasic, title: "4 · Basic"),
     ]
 
     var body: some View {
@@ -28,6 +27,7 @@ struct AdvancedDemoView: View {
                     PulsePlayerView(
                         session: session,
                         chrome: .full,
+                        theme: .pulse,
                         enableGestures: true
                     )
                     .frame(maxWidth: .infinity)
@@ -46,6 +46,63 @@ struct AdvancedDemoView: View {
                                     .disabled(!queue.hasNext)
                             }
                             .buttonStyle(.bordered)
+                        }
+
+                        Section("Production cockpit") {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    metricChip(
+                                        "TTFF",
+                                        value: ttffLabel,
+                                        color: .cyan
+                                    )
+                                    metricChip(
+                                        "Rebuffers",
+                                        value: "\(session.metricsSnapshot.rebufferCount)",
+                                        color: session.metricsSnapshot.rebufferCount == 0
+                                            ? .green
+                                            : .orange
+                                    )
+                                    metricChip(
+                                        "Fallbacks",
+                                        value: "\(session.metricsSnapshot.sourceFallbackCount)",
+                                        color: .purple
+                                    )
+                                    metricChip(
+                                        "Auth refresh",
+                                        value: "\(session.metricsSnapshot.credentialRefreshCount)",
+                                        color: .blue
+                                    )
+                                }
+                            }
+
+                            LabeledContent("Playback ID") {
+                                Text(String(session.playbackID.uuidString.prefix(8)))
+                                    .font(.caption.monospaced())
+                            }
+                            LabeledContent("Origin strategy") {
+                                Text("Primary + \(session.currentSource?.fallbackURLs.count ?? 0) fallbacks")
+                            }
+                            LabeledContent("Performance budget") {
+                                Text("8s TTFF · 3 rebuffers")
+                            }
+                            LabeledContent("Lifecycle") {
+                                Text("Audio + foreground recovery")
+                            }
+
+                            if productionEvents.isEmpty {
+                                Text("Production events will appear during playback")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ForEach(
+                                    Array(productionEvents.enumerated()),
+                                    id: \.offset
+                                ) { _, event in
+                                    Label(event, systemImage: "waveform.path.ecg")
+                                        .font(.caption)
+                                }
+                            }
                         }
 
                         Section("Quality") {
@@ -140,6 +197,7 @@ struct AdvancedDemoView: View {
             .navigationTitle("Advanced")
             .navigationBarTitleDisplayMode(.inline)
             .task { await startQueue() }
+            .task { await observeProductionEvents() }
             .onDisappear {
                 queue.saveProgress()
                 session.pause()
@@ -152,6 +210,36 @@ struct AdvancedDemoView: View {
         No public free FairPlay stream exists. Real playback needs Apple FPS cert + key server + encrypted HLS.
         Paste your cert/license endpoints (from FairPlay Streaming Server SDK or a multi-DRM vendor). Uses HTTPContentKeyProvider — real network, not a mock CKC.
         """
+    }
+
+    private var ttffLabel: String {
+        guard let value = session.metricsSnapshot.ttffMilliseconds else {
+            return "—"
+        }
+        return value >= 1_000
+            ? String(format: "%.1fs", value / 1_000)
+            : String(format: "%.0fms", value)
+    }
+
+    private func metricChip(
+        _ title: String,
+        value: String,
+        color: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.weight(.semibold).monospacedDigit())
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(color.opacity(0.28), lineWidth: 1)
+        }
     }
 
     private func startQueue() async {
@@ -178,14 +266,132 @@ struct AdvancedDemoView: View {
             )
         )
         session.contentKeyProvider = provider
+        session.persistableContentKeyStore = try? PersistableContentKeyFileStore()
         let source = MediaSource(
             id: contentId,
             url: asset,
             title: "FairPlay asset",
-            contentKeyAssetId: contentId
+            contentKeyAssetId: contentId,
+            requestsPersistableContentKey: true
         )
         await session.load(source)
         session.play()
         message = "FairPlay provider wired — playback needs valid cert+CKC+encrypted media"
+    }
+
+    private func observeProductionEvents() async {
+        for await event in session.makeProductionEventStream() {
+            productionEvents.insert(productionEventLabel(event), at: 0)
+            if productionEvents.count > 6 {
+                productionEvents.removeLast(productionEvents.count - 6)
+            }
+        }
+    }
+
+    private func productionEventLabel(_ event: ProductionPlayerEvent) -> String {
+        switch event {
+        case .credentialRefreshStarted:
+            "Credential refresh started"
+        case .credentialRefreshSucceeded:
+            "Credential refresh succeeded"
+        case .credentialRefreshFailed:
+            "Credential refresh failed"
+        case .sourceFallback(let from, let to):
+            "Origin fallback \(from + 1) → \(to + 1)"
+        case .liveLatencyChanged(let seconds):
+            String(format: "Live latency %.1fs", seconds)
+        case .liveCatchUpChanged(let active):
+            active ? "Live catch-up active" : "Live catch-up complete"
+        case .audioSession:
+            "Audio session event"
+        case .applicationLifecycle:
+            "Application lifecycle event"
+        case .interstitialStarted:
+            "Interstitial started"
+        case .interstitialEnded:
+            "Interstitial ended"
+        case .interstitialSkippable(_, let canSkip):
+            canSkip ? "Interstitial can be skipped" : "Interstitial skip locked"
+        case .editorialMarkerChanged(let id):
+            id == nil ? "Editorial segment ended" : "Editorial segment changed"
+        case .upNextPresented:
+            "Up Next presented"
+        case .upNextAccepted:
+            "Up Next accepted"
+        case .upNextDismissed:
+            "Up Next dismissed"
+        case .performanceBudgetExceeded:
+            "Performance budget exceeded"
+        case .persistableContentKeyStored:
+            "Persistable FairPlay key stored"
+        case .diagnostic:
+            "AVFoundation diagnostic received"
+        }
+    }
+
+    private static func episode(id: String, url: URL, title: String) -> MediaSource {
+        MediaSource(
+            id: id,
+            url: url,
+            fallbackURLs: [
+                DemoMedia.bipbopBasic,
+                DemoMedia.bipbop16x9,
+            ],
+            title: title,
+            subtitle: "Production playback lab",
+            interstitials: id == "adv"
+                ? [
+                    InterstitialDescriptor(
+                        id: "ios-demo-midroll",
+                        time: 12,
+                        assetURLs: [DemoMedia.bipbop4x3],
+                        playoutLimit: 6,
+                        skipAfter: 3
+                    ),
+                ]
+                : [],
+            editorialMarkers: [
+                EditorialMarker(
+                    id: "\(id)-intro",
+                    kind: .intro,
+                    title: "Intro",
+                    start: 2,
+                    end: 6
+                ),
+                EditorialMarker(
+                    id: "\(id)-chapter",
+                    kind: .chapter,
+                    title: "Main chapter",
+                    start: 6,
+                    end: 24
+                ),
+                EditorialMarker(
+                    id: "\(id)-credits",
+                    kind: .credits,
+                    title: "Credits",
+                    start: 24,
+                    end: 30
+                ),
+            ]
+        )
+    }
+
+    private static func makeSession() -> PlayerSession {
+        var configuration = PlayerConfiguration(
+            autoplay: true,
+            isMuted: false,
+            updatesNowPlayingInfo: true,
+            preferHardQualityLock: true
+        )
+        configuration.resumesPlaybackAfterForeground = true
+        configuration.liveLatencyPolicy = .lowLatency
+        configuration.performanceBudget = PlaybackPerformanceBudget(
+            maximumTTFFMilliseconds: 8_000,
+            maximumRebufferCount: 3,
+            maximumTotalRebufferMilliseconds: 8_000
+        )
+        let session = PlayerSession(configuration: configuration)
+        session.credentialProvider = DemoCredentialProvider()
+        return session
     }
 }

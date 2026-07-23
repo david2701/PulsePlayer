@@ -86,3 +86,13 @@ struct FeedItem: Identifiable, Hashable {
     let url: URL
     let title: String
 }
+
+/// Exercises the renewable-credential pipeline without inventing a demo secret.
+struct DemoCredentialProvider: PlaybackCredentialProviding {
+    func credentials(
+        for source: MediaSource,
+        reason: PlaybackCredentialRefreshReason
+    ) async throws -> PlaybackCredentials {
+        PlaybackCredentials(headers: source.headers, cookies: source.cookies)
+    }
+}
