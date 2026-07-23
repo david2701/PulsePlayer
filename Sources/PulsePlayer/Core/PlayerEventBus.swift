@@ -1,9 +1,9 @@
 import Foundation
 
-/// Multi-subscriber live-only event fan-out. Drop-oldest per subscriber (buffer 64).
+/// Multi-subscriber live-only event fan-out. Drop-oldest per subscriber.
 @MainActor
 public final class PlayerEventBus {
-    public static let defaultBufferSize = 64
+    public static let defaultBufferSize = 256
 
     private struct Subscriber {
         let id: UUID

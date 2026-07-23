@@ -2,6 +2,8 @@ import Foundation
 
 /// Lightweight HLS master playlist parser for quality variants.
 public enum HLSMasterParser: Sendable {
+    private static let maximumMasterPlaylistBytes = 5 * 1_024 * 1_024
+
     /// Parse `#EXT-X-STREAM-INF` variants. Relative URIs resolve against `baseURL` when provided.
     public static func parseQualities(from masterPlaylist: String, baseURL: URL? = nil) -> [StreamQuality] {
         var qualities: [StreamQuality] = []
@@ -25,14 +27,19 @@ public enum HLSMasterParser: Sendable {
                         height = Int(parts[1])
                     }
                 }
-                var uriString = "variant-\(qualities.count)"
+                var uriString: String?
                 var j = i + 1
                 while j < lines.count {
                     let u = lines[j].trimmingCharacters(in: .whitespaces)
                     if u.isEmpty { j += 1; continue }
-                    if u.hasPrefix("#") { break }
+                    if u.hasPrefix("#EXT-X-STREAM-INF:") { break }
+                    if u.hasPrefix("#") { j += 1; continue }
                     uriString = u
                     break
+                }
+                guard let uriString else {
+                    i += 1
+                    continue
                 }
                 let playlistURL = resolvePlaylistURL(uriString, baseURL: baseURL)
                 let stableId = makeStableID(
@@ -66,17 +73,51 @@ public enum HLSMasterParser: Sendable {
     }
 
     public static func fetchQualities(from masterURL: URL) async throws -> [StreamQuality] {
-        let (data, response) = try await URLSession.shared.data(from: masterURL)
+        var request = HTTPRequestBuilder.request(url: masterURL)
+        request.timeoutInterval = 20
+        return try await fetchQualities(request: request, baseURL: masterURL)
+    }
+
+    static func fetchQualities(
+        for source: MediaSource,
+        session: URLSession = .shared
+    ) async throws -> [StreamQuality] {
+        var request = HTTPRequestBuilder.request(
+            url: source.url,
+            headers: source.headers,
+            cookies: source.cookies
+        )
+        request.timeoutInterval = 20
+        return try await fetchQualities(
+            request: request,
+            baseURL: source.url,
+            session: session
+        )
+    }
+
+    private static func fetchQualities(
+        request: URLRequest,
+        baseURL: URL,
+        session: URLSession = .shared
+    ) async throws -> [StreamQuality] {
+        let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            throw PlayerError.assetLoadFailed(
-                underlying: "HLS master HTTP \(http.statusCode)",
-                recoverable: true
+            throw PlayerError.itemFailed(
+                domain: "HTTP",
+                code: http.statusCode,
+                message: "HLS master HTTP \(http.statusCode)",
+                recoverable: http.statusCode == 408
+                    || http.statusCode == 429
+                    || http.statusCode >= 500
             )
+        }
+        guard data.count <= maximumMasterPlaylistBytes else {
+            throw PlayerError.invalidSource("HLS master playlist exceeds 5 MB")
         }
         guard let text = String(data: data, encoding: .utf8) else {
             throw PlayerError.invalidSource("Invalid HLS master playlist encoding")
         }
-        return parseQualities(from: text, baseURL: masterURL)
+        return parseQualities(from: text, baseURL: baseURL)
     }
 
     private static func resolvePlaylistURL(_ uri: String, baseURL: URL?) -> URL? {

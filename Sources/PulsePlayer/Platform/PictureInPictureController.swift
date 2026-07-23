@@ -9,15 +9,23 @@ public final class PictureInPictureController: NSObject {
     public private(set) var isActive = false
 
     public var onEvent: ((PiPEvent) -> Void)?
+    public var restoreUserInterface: (@MainActor @Sendable () async -> Bool)?
 
     private var controller: AVPictureInPictureController?
     private weak var playerLayer: AVPlayerLayer?
+    private var possibleObservation: NSKeyValueObservation?
 
     public override init() {
         super.init()
     }
 
     public func attach(playerLayer: AVPlayerLayer?) {
+        if self.playerLayer === playerLayer,
+           (playerLayer == nil || controller != nil)
+        {
+            updatePossibility()
+            return
+        }
         self.playerLayer = playerLayer
         tearDownController()
 
@@ -36,7 +44,16 @@ public final class PictureInPictureController: NSObject {
         }
         #endif
         controller = pip
-        isPossible = pip != nil
+        possibleObservation = pip?.observe(
+            \.isPictureInPicturePossible,
+            options: [.initial, .new]
+        ) { [weak self] controller, _ in
+            let possible = controller.isPictureInPicturePossible
+            Task { @MainActor in
+                self?.isPossible = possible
+            }
+        }
+        updatePossibility()
     }
 
     public func start() {
@@ -57,11 +74,19 @@ public final class PictureInPictureController: NSObject {
     }
 
     private func tearDownController() {
+        possibleObservation?.invalidate()
+        possibleObservation = nil
         controller?.delegate = nil
         if controller?.isPictureInPictureActive == true {
             controller?.stopPictureInPicture()
         }
         controller = nil
+        isPossible = false
+        isActive = false
+    }
+
+    private func updatePossibility() {
+        isPossible = controller?.isPictureInPicturePossible == true
     }
 }
 
@@ -104,10 +129,25 @@ extension PictureInPictureController: AVPictureInPictureControllerDelegate {
         _ pictureInPictureController: AVPictureInPictureController,
         restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
     ) {
-        // Call completion immediately; UI restore is best-effort via event.
-        completionHandler(true)
+        let completion = PiPRestoreCompletion(completionHandler)
         Task { @MainActor in
             self.onEvent?(.restoreUI)
+            let restored = await self.restoreUserInterface?() ?? false
+            completion.call(restored)
         }
+    }
+}
+
+/// AVKit's delegate callback predates Sendable annotations. The callback is immutable
+/// and invoked exactly once from the main actor.
+private final class PiPRestoreCompletion: @unchecked Sendable {
+    private let callback: (Bool) -> Void
+
+    init(_ callback: @escaping (Bool) -> Void) {
+        self.callback = callback
+    }
+
+    func call(_ restored: Bool) {
+        callback(restored)
     }
 }

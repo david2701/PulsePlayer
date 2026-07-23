@@ -21,13 +21,21 @@ extension PlayerSession {
         pipController.stop()
     }
 
+    /// Called when PiP asks the host to restore its playback UI.
+    public var pictureInPictureRestoreHandler: (@MainActor @Sendable () async -> Bool)? {
+        get { pipController.restoreUserInterface }
+        set { pipController.restoreUserInterface = newValue }
+    }
+
     func configurePlatformHooks() {
         pipController.onEvent = { [weak self] event in
             self?.emit(.pictureInPicture(event))
         }
 
         if let np = dependencies.nowPlaying as? SystemNowPlayingCenter {
-            np.setCommandHandlers(
+            np.register(
+                owner: id,
+                handlers:
                 .init(
                     play: { [weak self] in self?.play() },
                     pause: { [weak self] in self?.pause() },
@@ -46,14 +54,49 @@ extension PlayerSession {
         }
     }
 
+    func claimNowPlayingOwnership() {
+        guard configuration.updatesNowPlayingInfo else { return }
+        (dependencies.nowPlaying as? SystemNowPlayingCenter)?.activate(owner: id)
+    }
+
+    func releaseNowPlayingOwnership(clear: Bool) {
+        if let center = dependencies.nowPlaying as? SystemNowPlayingCenter {
+            center.deactivate(owner: id, clear: clear)
+        } else if clear {
+            dependencies.nowPlaying.clear()
+        }
+    }
+
+    func unregisterNowPlayingOwnership(clear: Bool) {
+        if let center = dependencies.nowPlaying as? SystemNowPlayingCenter {
+            center.unregister(owner: id, clear: clear)
+        } else if clear {
+            dependencies.nowPlaying.clear()
+        }
+    }
+
     func activateAudioIfNeeded() {
+        guard configuration.managesAudioSession, !audioSessionActivated else { return }
         do {
             try dependencies.audioSession.activateForPlayback(
                 background: configuration.prefersBackgroundAudio
             )
+            audioSessionActivated = true
+            lifetimeCleanup.setAudioSessionActive(true)
         } catch {
             emit(.warning(URLSanitizer.sanitizeMessage(error.localizedDescription)))
         }
+    }
+
+    func deactivateAudioIfNeeded() {
+        guard audioSessionActivated else { return }
+        do {
+            try dependencies.audioSession.deactivate()
+        } catch {
+            emit(.warning(URLSanitizer.sanitizeMessage(error.localizedDescription)))
+        }
+        audioSessionActivated = false
+        lifetimeCleanup.setAudioSessionActive(false)
     }
 
     func refreshNowPlaying(rate: Float? = nil) {
@@ -62,19 +105,32 @@ extension PlayerSession {
         if let rate {
             playingRate = rate
         } else {
-            playingRate = (status == .playing || status == .buffering) ? 1 : 0
+            playingRate = (status == .playing || status == .buffering)
+                ? playbackRate
+                : 0
         }
-        dependencies.nowPlaying.update(
-            title: currentSource?.title,
-            subtitle: currentSource?.subtitle,
-            elapsed: engine.currentTime(),
-            duration: engine.duration(),
-            rate: playingRate
-        )
+        if let center = dependencies.nowPlaying as? SystemNowPlayingCenter {
+            center.update(
+                owner: id,
+                title: currentSource?.title,
+                subtitle: currentSource?.subtitle,
+                elapsed: engine.currentTime(),
+                duration: engine.duration(),
+                rate: playingRate
+            )
+        } else {
+            dependencies.nowPlaying.update(
+                title: currentSource?.title,
+                subtitle: currentSource?.subtitle,
+                elapsed: engine.currentTime(),
+                duration: engine.duration(),
+                rate: playingRate
+            )
+        }
     }
 
     func clearNowPlaying() {
-        dependencies.nowPlaying.clear()
+        releaseNowPlayingOwnership(clear: true)
     }
 
     func attachPiP(to layer: AVPlayerLayer?) {

@@ -12,4 +12,15 @@ extension PlayerSession {
             }
         }
     }
+
+    /// Store used to acquire and reuse offline FairPlay keys.
+    public var persistableContentKeyStore: (any PersistableContentKeyStoring)? {
+        get { _persistableContentKeyStore }
+        set {
+            _persistableContentKeyStore = newValue
+            if let engine = engine as? AVPlayerEngine {
+                engine.persistableContentKeyStore = newValue
+            }
+        }
+    }
 }

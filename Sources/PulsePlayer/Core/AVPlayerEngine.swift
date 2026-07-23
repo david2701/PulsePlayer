@@ -3,9 +3,10 @@ import Foundation
 
 /// Production engine: AVPlayer wrapper. Split via extensions for ≤400 lines.
 @MainActor
-final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
+final class AVPlayerEngine: ManagedPlaybackControlling, AVPlayerEngineUIBridging {
     let avPlayer: AVPlayer
     var onSignal: ((PlayerEngineSignal) -> Void)?
+    var onProductionSignal: ((ProductionEngineSignal) -> Void)?
 
     private(set) var currentItem: AVPlayerItem?
     private(set) var configuration: PlayerConfiguration = .default
@@ -22,18 +23,30 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
     var endObserver: NSObjectProtocol?
     var failedObserver: NSObjectProtocol?
     var accessLogObserver: NSObjectProtocol?
+    var errorLogObserver: NSObjectProtocol?
     var timeObserver: Any?
+    var interstitialMonitor: AVPlayerInterstitialEventMonitor?
+    var interstitialController: AVPlayerInterstitialEventController?
+    var interstitialObservers: [NSObjectProtocol] = []
+    var interstitialTimeObserver: Any?
+    var interstitialDescriptorByID: [String: InterstitialDescriptor] = [:]
 
     var lastIndicatedBps: Double?
     var lastObservedBps: Double?
     var lastEmittedTime: TimeInterval = -1
+    var lastBufferProgress: Double?
+    var hasEmittedBufferProgress = false
 
     /// id → AVMediaSelectionOption for current item
     var audioOptionById: [String: AVMediaSelectionOption] = [:]
     var textOptionById: [String: AVMediaSelectionOption] = [:]
+    var audioSelectionGroup: AVMediaSelectionGroup?
+    var textSelectionGroup: AVMediaSelectionGroup?
     var fairPlayLoader: FairPlayContentKeyLoader?
     var thumbnailGenerator = ThumbnailGenerator()
     var contentKeyProvider: (any ContentKeyProviding)?
+    var persistableContentKeyStore: (any PersistableContentKeyStoring)?
+    var logHandler: any PulsePlayerLogHandler = DefaultPulsePlayerLogHandler()
 
     init(player: AVPlayer = AVPlayer()) {
         self.avPlayer = player
@@ -50,21 +63,30 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
         reinstallTimeObserver()
     }
 
+    func setLogHandler(_ handler: any PulsePlayerLogHandler) {
+        logHandler = handler
+    }
+
     func replaceCurrentItem(with source: MediaSource) async throws {
         generation &+= 1
         let gen = generation
-        tearDownItemObservers()
-        fairPlayLoader?.tearDown()
-        fairPlayLoader = nil
-        audioOptionById = [:]
-        textOptionById = [:]
-        thumbnailGenerator.clear()
+        clearCurrentItemResources(replacingPlayerItem: false)
 
         let asset = AssetFactory.makeURLAsset(from: source)
 
         if let provider = contentKeyProvider {
             let assetId = source.contentKeyAssetId ?? source.id
-            let loader = FairPlayContentKeyLoader(provider: provider, assetId: assetId)
+            let loader = FairPlayContentKeyLoader(
+                provider: provider,
+                assetId: assetId,
+                persistableStore: source.requestsPersistableContentKey
+                    ? persistableContentKeyStore
+                    : nil,
+                logHandler: logHandler
+            )
+            loader.onPersistableKeyStored = { [weak self] assetID in
+                self?.emitProduction(.persistableContentKeyStored(assetID: assetID))
+            }
             loader.attach(to: asset)
             fairPlayLoader = loader
         }
@@ -81,28 +103,48 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
 
         installItemObservers(item: item, generation: gen)
         avPlayer.replaceCurrentItem(with: item)
+        configureInterstitials(for: source, primaryItem: item, generation: gen)
         thumbnailGenerator.prepare(asset: asset)
 
-        // Kick asset readiness; KVO may also fire.
         do {
-            let status = try await asset.load(.isPlayable)
-            guard gen == generation else { return }
-            if !status {
-                emit(.itemFailed(
-                    domain: "PulsePlayer",
-                    code: -1,
-                    message: "Asset not playable"
-                ))
+            let playable = try await asset.load(.isPlayable)
+            try Task.checkCancellation()
+            guard gen == generation else {
+                throw CancellationError()
+            }
+            guard playable else {
+                throw PlayerError.invalidSource("Asset is not playable")
             }
             await refreshTrackMaps(asset: asset, item: item)
         } catch {
-            guard gen == generation else { return }
-            let ns = error as NSError
-            emit(.itemFailed(
-                domain: ns.domain,
-                code: ns.code,
-                message: URLSanitizer.sanitizeMessage(ns.localizedDescription)
-            ))
+            guard gen == generation else { throw CancellationError() }
+            clearCurrentItem()
+            throw error
+        }
+    }
+
+    func clearCurrentItem() {
+        generation &+= 1
+        clearCurrentItemResources(replacingPlayerItem: true)
+    }
+
+    private func clearCurrentItemResources(replacingPlayerItem: Bool) {
+        tearDownItemObservers()
+        fairPlayLoader?.tearDown()
+        fairPlayLoader = nil
+        audioOptionById = [:]
+        textOptionById = [:]
+        audioSelectionGroup = nil
+        textSelectionGroup = nil
+        thumbnailGenerator.clear()
+        tearDownInterstitials()
+        lastIndicatedBps = nil
+        lastObservedBps = nil
+        lastBufferProgress = nil
+        hasEmittedBufferProgress = false
+        if replacingPlayerItem {
+            avPlayer.replaceCurrentItem(with: nil)
+            currentItem = nil
         }
     }
 
@@ -112,6 +154,10 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
 
     func pause() {
         avPlayer.pause()
+    }
+
+    func cancelPendingSeeks() {
+        currentItem?.cancelPendingSeeks()
     }
 
     func seek(to time: TimeInterval) async throws {
@@ -145,19 +191,13 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
 
     func tearDown() {
         generation &+= 1
-        tearDownItemObservers()
+        clearCurrentItemResources(replacingPlayerItem: true)
         tearDownPlayerObservations()
         removeTimeObserver()
-        fairPlayLoader?.tearDown()
-        fairPlayLoader = nil
-        thumbnailGenerator.clear()
-        audioOptionById = [:]
-        textOptionById = [:]
-        avPlayer.replaceCurrentItem(with: nil)
-        currentItem = nil
         playerLayer?.player = nil
         playerLayer = nil
         onSignal = nil
+        onProductionSignal = nil
     }
 
     func audioTracks() -> [MediaTrackInfo] {
@@ -197,25 +237,35 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
         return start...end
     }
 
-    func prepareThumbnailGenerator() {
-        if let asset = currentItem?.asset {
-            thumbnailGenerator.prepare(asset: asset)
-        }
-    }
-
     func thumbnail(at time: TimeInterval) async -> CGImage? {
         await thumbnailGenerator.image(at: time)
+    }
+
+    func prepareThumbnailGenerator() {
+        guard let asset = currentItem?.asset as? AVURLAsset else { return }
+        thumbnailGenerator.prepare(asset: asset)
+    }
+
+    func cancelThumbnailGeneration() {
+        thumbnailGenerator.cancelPending()
+    }
+
+    func skipCurrentInterstitial() {
+        guard let controller = interstitialController, controller.currentEvent != nil else { return }
+        if #available(iOS 26, tvOS 26, macOS 26, *) {
+            controller.skipCurrentEvent()
+        } else {
+            controller.cancelCurrentEvent(withResumptionOffset: .invalid)
+        }
     }
 
     private func buildTrackInfos(
         kind: MediaTrackKind,
         map: [String: AVMediaSelectionOption]
     ) -> [MediaTrackInfo] {
-        guard let item = currentItem,
-              let group = item.asset.mediaSelectionGroup(
-                forMediaCharacteristic: kind == .audio ? .audible : .legible
-              )
-        else { return [] }
+        guard let item = currentItem else { return [] }
+        let group = kind == .audio ? audioSelectionGroup : textSelectionGroup
+        guard let group else { return [] }
         let selected = item.currentMediaSelection.selectedMediaOption(in: group)
         return map.map { id, option in
             MediaTrackInfo(
@@ -235,9 +285,9 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
         map: [String: AVMediaSelectionOption],
         characteristic: AVMediaCharacteristic
     ) {
-        guard let item = currentItem,
-              let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: characteristic)
-        else { return }
+        guard let item = currentItem else { return }
+        let group = characteristic == .audible ? audioSelectionGroup : textSelectionGroup
+        guard let group else { return }
         if let optionId, let option = map[optionId] {
             item.select(option, in: group)
         } else {
@@ -248,13 +298,33 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
     private func refreshTrackMaps(asset: AVURLAsset, item: AVPlayerItem) async {
         audioOptionById = [:]
         textOptionById = [:]
-        if let audioGroup = asset.mediaSelectionGroup(forMediaCharacteristic: .audible) {
+        do {
+            audioSelectionGroup = try await asset.loadMediaSelectionGroup(for: .audible)
+        } catch is CancellationError {
+            return
+        } catch {
+            logHandler.log(
+                level: .debug,
+                message: "Audio-track discovery unavailable: \(error.localizedDescription)"
+            )
+        }
+        do {
+            textSelectionGroup = try await asset.loadMediaSelectionGroup(for: .legible)
+        } catch is CancellationError {
+            return
+        } catch {
+            logHandler.log(
+                level: .debug,
+                message: "Text-track discovery unavailable: \(error.localizedDescription)"
+            )
+        }
+        if let audioGroup = audioSelectionGroup {
             for (idx, option) in audioGroup.options.enumerated() {
                 let id = "audio-\(option.extendedLanguageTag ?? option.displayName)-\(idx)"
                 audioOptionById[id] = option
             }
         }
-        if let textGroup = asset.mediaSelectionGroup(forMediaCharacteristic: .legible) {
+        if let textGroup = textSelectionGroup {
             for (idx, option) in textGroup.options.enumerated() {
                 let id = "text-\(option.extendedLanguageTag ?? option.displayName)-\(idx)"
                 textOptionById[id] = option
@@ -264,8 +334,15 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
     }
 
     func attachPlayerLayer(_ layer: AVPlayerLayer?) {
+        guard playerLayer !== layer else {
+            if layer?.player !== avPlayer {
+                layer?.player = avPlayer
+            }
+            return
+        }
         readyForDisplayObs?.invalidate()
         readyForDisplayObs = nil
+        playerLayer?.player = nil
         playerLayer = layer
         layer?.player = avPlayer
         guard let layer else { return }
@@ -285,6 +362,10 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
         onSignal?(signal)
     }
 
+    func emitProduction(_ signal: ProductionEngineSignal) {
+        onProductionSignal?(signal)
+    }
+
     var currentGeneration: UInt64 { generation }
 
     func applyItemConfiguration(to item: AVPlayerItem? = nil) {
@@ -298,6 +379,16 @@ final class AVPlayerEngine: PlaybackControlling, AVPlayerEngineUIBridging {
         target.preferredMaximumResolution = configuration.preferredMaximumResolution
         target.canUseNetworkResourcesForLiveStreamingWhilePaused =
             configuration.canUseNetworkResourcesForLiveStreamingWhilePaused
+        if let livePolicy = configuration.liveLatencyPolicy {
+            target.configuredTimeOffsetFromLive = CMTime(
+                seconds: livePolicy.targetLatency,
+                preferredTimescale: 600
+            )
+            target.automaticallyPreservesTimeOffsetFromLive = true
+        } else {
+            target.configuredTimeOffsetFromLive = .invalid
+            target.automaticallyPreservesTimeOffsetFromLive = false
+        }
         if configuration.preferredForwardBufferDuration > 0 {
             target.preferredForwardBufferDuration = configuration.preferredForwardBufferDuration
         }

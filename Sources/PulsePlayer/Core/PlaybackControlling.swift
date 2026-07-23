@@ -29,3 +29,14 @@ package protocol PlaybackControlling: AnyObject {
     func prepareThumbnailGenerator()
     func thumbnail(at time: TimeInterval) async -> CGImage?
 }
+
+/// Additive engine lifecycle/production capabilities introduced after 1.0.
+@MainActor
+package protocol ManagedPlaybackControlling: PlaybackControlling {
+    func setLogHandler(_ handler: any PulsePlayerLogHandler)
+    func clearCurrentItem()
+    func cancelPendingSeeks()
+    func cancelThumbnailGeneration()
+    func skipCurrentInterstitial()
+    var onProductionSignal: ((ProductionEngineSignal) -> Void)? { get set }
+}

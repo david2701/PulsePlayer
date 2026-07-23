@@ -6,12 +6,22 @@ import Foundation
 final class FairPlayContentKeyLoader: NSObject, AVContentKeySessionDelegate {
     private let providerBox: UncheckedContentKeyProvider
     private let assetId: String
+    private let persistableStore: (any PersistableContentKeyStoring)?
+    private let logHandler: any PulsePlayerLogHandler
     private let keySession: AVContentKeySession
     private weak var asset: AVURLAsset?
+    var onPersistableKeyStored: ((String) -> Void)?
 
-    init(provider: any ContentKeyProviding, assetId: String) {
+    init(
+        provider: any ContentKeyProviding,
+        assetId: String,
+        persistableStore: (any PersistableContentKeyStoring)? = nil,
+        logHandler: any PulsePlayerLogHandler
+    ) {
         self.providerBox = UncheckedContentKeyProvider(provider)
         self.assetId = assetId
+        self.persistableStore = persistableStore
+        self.logHandler = logHandler
         self.keySession = AVContentKeySession(keySystem: .fairPlayStreaming)
         super.init()
         keySession.setDelegate(self, queue: .main)
@@ -35,7 +45,15 @@ final class FairPlayContentKeyLoader: NSObject, AVContentKeySessionDelegate {
         didProvide keyRequest: AVContentKeyRequest
     ) {
         Task { @MainActor in
-            await self.handle(keyRequest: keyRequest)
+            if self.persistableStore != nil {
+                do {
+                    try self.requestPersistableKey(for: keyRequest)
+                } catch {
+                    keyRequest.processContentKeyResponseError(error)
+                }
+            } else {
+                await self.handleStreaming(keyRequest: keyRequest)
+            }
         }
     }
 
@@ -44,7 +62,36 @@ final class FairPlayContentKeyLoader: NSObject, AVContentKeySessionDelegate {
         didProvideRenewingContentKeyRequest keyRequest: AVContentKeyRequest
     ) {
         Task { @MainActor in
-            await self.handle(keyRequest: keyRequest)
+            await self.handleStreaming(keyRequest: keyRequest)
+        }
+    }
+
+    nonisolated func contentKeySession(
+        _ session: AVContentKeySession,
+        didProvide keyRequest: AVPersistableContentKeyRequest
+    ) {
+        Task { @MainActor in
+            await self.handlePersistable(keyRequest: keyRequest)
+        }
+    }
+
+    nonisolated func contentKeySession(
+        _ session: AVContentKeySession,
+        didUpdatePersistableContentKey persistableContentKey: Data,
+        forContentKeyIdentifier keyIdentifier: Any
+    ) {
+        Task { @MainActor in
+            guard let store = self.persistableStore else { return }
+            do {
+                try await store.storeContentKey(persistableContentKey, for: self.assetId)
+                self.onPersistableKeyStored?(self.assetId)
+            } catch {
+                self.logHandler.log(
+                    level: .error,
+                    message: "FairPlay key update could not be persisted: "
+                        + URLSanitizer.sanitizeMessage(error.localizedDescription)
+                )
+            }
         }
     }
 
@@ -55,43 +102,112 @@ final class FairPlayContentKeyLoader: NSObject, AVContentKeySessionDelegate {
     ) {
         let msg = URLSanitizer.sanitizeMessage(err.localizedDescription)
         Task { @MainActor in
-            PulseLog.error("FairPlay key request failed: \(msg)")
+            self.logHandler.log(level: .error, message: "FairPlay key request failed: \(msg)")
         }
     }
 
-    private func handle(keyRequest: AVContentKeyRequest) async {
+    nonisolated func contentKeySession(
+        _ session: AVContentKeySession,
+        shouldRetry keyRequest: AVContentKeyRequest,
+        reason retryReason: AVContentKeyRequest.RetryReason
+    ) -> Bool {
+        retryReason == .timedOut
+            || retryReason == .receivedResponseWithExpiredLease
+            || retryReason == .receivedObsoleteContentKey
+    }
+
+    private func handleStreaming(keyRequest: AVContentKeyRequest) async {
         do {
-            let cert = try await providerBox.certificateData()
-            let contentIdData = Data(assetId.utf8)
-            let spc: Data = try await withCheckedThrowingContinuation { cont in
-                do {
-                    try keyRequest.makeStreamingContentKeyRequestData(
-                        forApp: cert,
-                        contentIdentifier: contentIdData,
-                        options: nil
-                    ) { data, error in
-                        if let error {
-                            cont.resume(throwing: error)
-                        } else if let data {
-                            cont.resume(returning: data)
-                        } else {
-                            cont.resume(
-                                throwing: PlayerError.unknown(
-                                    "Empty FairPlay SPC",
-                                    recoverable: false
-                                )
-                            )
-                        }
-                    }
-                } catch {
-                    cont.resume(throwing: error)
-                }
-            }
+            let spc = try await makeSPC(for: keyRequest)
             let ckc = try await providerBox.contentKey(spcData: spc, assetId: assetId)
             let response = AVContentKeyResponse(fairPlayStreamingKeyResponseData: ckc)
             keyRequest.processContentKeyResponse(response)
         } catch {
             keyRequest.processContentKeyResponseError(error)
+        }
+    }
+
+    private func handlePersistable(keyRequest: AVPersistableContentKeyRequest) async {
+        do {
+            guard let store = persistableStore else {
+                await handleStreaming(keyRequest: keyRequest)
+                return
+            }
+            if let existing = try await store.contentKey(for: assetId) {
+                keyRequest.processContentKeyResponse(
+                    AVContentKeyResponse(fairPlayStreamingKeyResponseData: existing)
+                )
+                return
+            }
+
+            let spc = try await makeSPC(for: keyRequest)
+            let ckc = try await providerBox.contentKey(spcData: spc, assetId: assetId)
+            let key = try keyRequest.persistableContentKey(
+                fromKeyVendorResponse: ckc,
+                options: nil
+            )
+            try await store.storeContentKey(key, for: assetId)
+            onPersistableKeyStored?(assetId)
+            keyRequest.processContentKeyResponse(
+                AVContentKeyResponse(fairPlayStreamingKeyResponseData: key)
+            )
+        } catch {
+            keyRequest.processContentKeyResponseError(error)
+        }
+    }
+
+    private func makeSPC(for keyRequest: AVContentKeyRequest) async throws -> Data {
+        let cert = try await providerBox.certificateData()
+        let contentIdData = Data(assetId.utf8)
+        return try await withCheckedThrowingContinuation { continuation in
+            keyRequest.makeStreamingContentKeyRequestData(
+                forApp: cert,
+                contentIdentifier: contentIdData,
+                options: nil
+            ) { data, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let data {
+                    continuation.resume(returning: data)
+                } else {
+                    continuation.resume(
+                        throwing: PlayerError.unknown(
+                            "Empty FairPlay SPC",
+                            recoverable: false
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    /// Calls the non-deprecated NSError-returning selector. Swift's importer
+    /// otherwise picks the deprecated void overload on iOS where both exist.
+    private func requestPersistableKey(for keyRequest: AVContentKeyRequest) throws {
+        let selector = NSSelectorFromString(
+            "respondByRequestingPersistableContentKeyRequestAndReturnError:"
+        )
+        guard keyRequest.responds(to: selector) else {
+            throw PlayerError.unknown(
+                "Persistable FairPlay keys are unavailable",
+                recoverable: false
+            )
+        }
+        typealias Implementation = @convention(c) (
+            AnyObject,
+            Selector,
+            UnsafeMutablePointer<NSError?>?
+        ) -> Bool
+        let implementation = unsafeBitCast(
+            keyRequest.method(for: selector),
+            to: Implementation.self
+        )
+        var error: NSError?
+        guard implementation(keyRequest, selector, &error) else {
+            throw error ?? PlayerError.unknown(
+                "FairPlay rejected the persistable-key request",
+                recoverable: false
+            )
         }
     }
 }

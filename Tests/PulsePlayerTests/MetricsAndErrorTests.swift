@@ -9,6 +9,15 @@ struct MetricsAndErrorTests {
         #expect(PlayerError.sessionInvalidated.suggestedAction == .recreateSession)
         #expect(PlayerError.startupTimedOut.suggestedAction == .retry)
         #expect(PlayerError.invalidSource("bad").suggestedAction == .changeSource)
+        #expect(PlayerError.cancelled.suggestedAction == .none)
+        #expect(
+            PlayerError.itemFailed(
+                domain: "HTTP",
+                code: 401,
+                message: "Unauthorized",
+                recoverable: false
+            ).suggestedAction == .reauthenticate
+        )
         #expect(
             PlayerError.assetLoadFailed(underlying: "x", recoverable: true).suggestedAction == .retry
         )
@@ -28,7 +37,7 @@ struct MetricsAndErrorTests {
         let session = PlayerSession(configuration: config, dependencies: deps)
         defer { session.invalidate() }
 
-        await session.load(MediaSource(url: URL(string: "https://example.com/a.m3u8")!, title: "A"))
+        await session.load(MediaSource(url: URL(string: "https://example.com/a.mp4")!, title: "A"))
         #expect(session.metricsSnapshot.loadCount == 1)
         #expect(session.metricsSnapshot.sourceID != nil)
 
@@ -77,9 +86,11 @@ struct MetricsAndErrorTests {
         let session = PlayerSession(configuration: config, dependencies: deps)
         defer { session.invalidate() }
 
-        let master = URL(string: "https://cdn.example.com/master.m3u8")!
+        let master = URL(string: "https://cdn.example.com/master.mp4")!
         let v720 = URL(string: "https://cdn.example.com/720.m3u8")!
         let v1080 = URL(string: "https://cdn.example.com/1080.m3u8")!
+        engine.replaceDelayByURL[v720] = .milliseconds(80)
+        engine.replaceDelayByURL[v1080] = .milliseconds(1)
         await session.load(MediaSource(id: "q", url: master))
         let q720 = StreamQuality(
             id: "720", bandwidth: 2_500_000, width: 1280, height: 720, playlistURL: v720
@@ -90,12 +101,19 @@ struct MetricsAndErrorTests {
         session.availableQualities = [q720, q1080]
         session.qualityMasterURL = master
 
-        async let a: Void = session.setQuality(q720)
-        async let b: Void = session.setQuality(q1080)
-        _ = await (a, b)
+        let first = Task { @MainActor in
+            await session.setQuality(q720)
+        }
+        try? await Task.sleep(for: .milliseconds(10))
+        await session.setQuality(q1080)
+        await first.value
 
-        #expect(session.selectedQualityId == q1080.id || session.selectedQualityId == q720.id)
-        #expect(engine.source?.url == v1080 || engine.source?.url == v720)
+        #expect(session.selectedQualityId == q1080.id)
+        #expect(engine.source?.url == v1080)
         #expect(session.metricsSnapshot.qualitySwitchCount >= 1)
+    }
+
+    @Test func safeQualityLockDefaultPreservesMasterPresentation() {
+        #expect(!PlayerConfiguration.default.preferHardQualityLock)
     }
 }

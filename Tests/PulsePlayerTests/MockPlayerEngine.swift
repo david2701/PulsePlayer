@@ -4,8 +4,9 @@ import Foundation
 
 /// Test double: no AVPlayer, no network.
 @MainActor
-final class MockPlayerEngine: PlaybackControlling {
+final class MockPlayerEngine: ManagedPlaybackControlling {
     var onSignal: ((PlayerEngineSignal) -> Void)?
+    var onProductionSignal: ((ProductionEngineSignal) -> Void)?
 
     private(set) var configuration = PlayerConfiguration.default
     private(set) var source: MediaSource?
@@ -16,22 +17,45 @@ final class MockPlayerEngine: PlaybackControlling {
     private var _currentTime: TimeInterval = 0
     private var _duration: TimeInterval? = 120
     private(set) var replaceCount = 0
+    private(set) var clearCount = 0
+    private(set) var cancelSeekCount = 0
+    private(set) var cancelThumbnailCount = 0
+    private(set) var tearDownCount = 0
+    private(set) var skipInterstitialCount = 0
     var replaceError: Error?
+    var replaceErrorByURL: [URL: Error] = [:]
     var autoReady = true
+    var replaceDelayByURL: [URL: Duration] = [:]
+    var seekDelayByTime: [TimeInterval: Duration] = [:]
     var peakBitRate: Double = 0
     var maxResolution: CGSize = .zero
     var mockAudio: [MediaTrackInfo] = []
     var mockText: [MediaTrackInfo] = []
     var seekable: ClosedRange<TimeInterval>? = 0...120
+    private var replaceGeneration: UInt64 = 0
+    private var seekGeneration: UInt64 = 0
 
     func applyConfiguration(_ config: PlayerConfiguration) {
         configuration = config
         muted = config.isMuted
     }
 
+    func setLogHandler(_ handler: any PulsePlayerLogHandler) {
+        _ = handler
+    }
+
     func replaceCurrentItem(with source: MediaSource) async throws {
         replaceCount += 1
-        if let replaceError {
+        replaceGeneration &+= 1
+        let generation = replaceGeneration
+        if let delay = replaceDelayByURL[source.url] {
+            try await Task.sleep(for: delay)
+        }
+        try Task.checkCancellation()
+        guard generation == replaceGeneration else {
+            throw CancellationError()
+        }
+        if let replaceError = replaceErrorByURL[source.url] ?? replaceError {
             throw replaceError
         }
         self.source = source
@@ -41,6 +65,15 @@ final class MockPlayerEngine: PlaybackControlling {
             onSignal?(.durationKnown(_duration))
             onSignal?(.bufferHealthy)
         }
+    }
+
+    func clearCurrentItem() {
+        clearCount += 1
+        replaceGeneration &+= 1
+        seekGeneration &+= 1
+        source = nil
+        _currentTime = 0
+        isPlaying = false
     }
 
     func play() {
@@ -53,17 +86,39 @@ final class MockPlayerEngine: PlaybackControlling {
         onSignal?(.timeControlPaused)
     }
 
+    func cancelPendingSeeks() {
+        cancelSeekCount += 1
+        seekGeneration &+= 1
+    }
+
     func seek(to time: TimeInterval) async throws {
+        let generation = seekGeneration
+        if let delay = seekDelayByTime[time] {
+            try await Task.sleep(for: delay)
+        }
+        try Task.checkCancellation()
+        guard generation == seekGeneration else {
+            throw CancellationError()
+        }
         _currentTime = time
     }
 
-    func setRate(_ rate: Float) { self.rate = rate }
+    func setRate(_ rate: Float) {
+        self.rate = rate
+        isPlaying = rate > 0
+        if rate > 0 {
+            onSignal?(.timeControlPlaying)
+        }
+    }
     func setMuted(_ muted: Bool) { self.muted = muted }
     func setVolume(_ volume: Float) { self.volume = volume }
     func currentTime() -> TimeInterval { _currentTime }
     func duration() -> TimeInterval? { _duration }
 
     func tearDown() {
+        tearDownCount += 1
+        replaceGeneration &+= 1
+        seekGeneration &+= 1
         source = nil
         isPlaying = false
         onSignal = nil
@@ -100,10 +155,19 @@ final class MockPlayerEngine: PlaybackControlling {
     func setPreferredPeakBitRate(_ bps: Double) { peakBitRate = bps }
     func setPreferredMaximumResolution(_ size: CGSize) { maxResolution = size }
     func seekableTimeRange() -> ClosedRange<TimeInterval>? { seekable }
-    func prepareThumbnailGenerator() {}
     func thumbnail(at time: TimeInterval) async -> CGImage? { nil }
+    func prepareThumbnailGenerator() {}
+    func cancelThumbnailGeneration() {
+        cancelThumbnailCount += 1
+    }
+    func skipCurrentInterstitial() {
+        skipInterstitialCount += 1
+    }
 
     func emit(_ signal: PlayerEngineSignal) { onSignal?(signal) }
+    func emitProduction(_ signal: ProductionEngineSignal) {
+        onProductionSignal?(signal)
+    }
     func setDuration(_ value: TimeInterval?) { _duration = value }
     func advanceTime(to value: TimeInterval) {
         _currentTime = value

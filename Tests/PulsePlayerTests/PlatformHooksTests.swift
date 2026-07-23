@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import PulsePlayer
 
@@ -38,5 +39,80 @@ struct PlatformHooksTests {
     @Test func attributionCreditsAuthor() {
         #expect(PulsePlayerInfo.author == "David Villegas")
         #expect(PulsePlayerInfo.attribution.contains("David Villegas"))
+    }
+
+    @Test func audioOwnershipCanMoveBackToTheHost() async {
+        let engine = MockPlayerEngine()
+        let audio = MockAudioSession()
+        let deps = PlayerDependencies(
+            clock: SystemPlayerClock(),
+            network: AlwaysSatisfiedNetwork(),
+            nowPlaying: NoOpNowPlayingCenter(),
+            audioSession: audio,
+            log: DefaultPulsePlayerLogHandler(),
+            engineFactory: { engine }
+        )
+        var config = PlayerConfiguration.default
+        config.autoplay = true
+        config.updatesNowPlayingInfo = false
+        let session = PlayerSession(configuration: config, dependencies: deps)
+        await session.load(MediaSource(url: URL(string: "https://example.com/a.mp4")!))
+        #expect(audio.activationCount == 1)
+
+        session.updateConfiguration { $0.managesAudioSession = false }
+        #expect(audio.deactivationCount == 1)
+
+        session.updateConfiguration { $0.managesAudioSession = true }
+        #expect(audio.activationCount == 2)
+        session.invalidate()
+        #expect(audio.deactivationCount == 2)
+    }
+
+    @Test func lifetimeFallbackTearsDownForgottenSession() async {
+        let engine = MockPlayerEngine()
+        let audio = MockAudioSession()
+        let deps = PlayerDependencies(
+            clock: SystemPlayerClock(),
+            network: AlwaysSatisfiedNetwork(),
+            nowPlaying: NoOpNowPlayingCenter(),
+            audioSession: audio,
+            log: DefaultPulsePlayerLogHandler(),
+            engineFactory: { engine }
+        )
+        var config = PlayerConfiguration.default
+        config.autoplay = true
+        config.updatesNowPlayingInfo = false
+        var session: PlayerSession? = PlayerSession(
+            configuration: config,
+            dependencies: deps
+        )
+        weak let weakSession = session
+        await session?.load(
+            MediaSource(url: URL(string: "https://example.com/a.mp4")!)
+        )
+        #expect(audio.activationCount == 1)
+
+        session = nil
+        await Task.yield()
+        await Task.yield()
+
+        #expect(weakSession == nil)
+        #expect(audio.deactivationCount == 1)
+        #expect(engine.tearDownCount == 1)
+    }
+}
+
+@MainActor
+private final class MockAudioSession: AudioSessionConfiguring {
+    private(set) var activationCount = 0
+    private(set) var deactivationCount = 0
+
+    func activateForPlayback(background: Bool) throws {
+        _ = background
+        activationCount += 1
+    }
+
+    func deactivate() throws {
+        deactivationCount += 1
     }
 }

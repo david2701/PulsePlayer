@@ -67,13 +67,13 @@ extension AVPlayerEngine {
 
     private func emitBufferProgress() {
         guard let item = currentItem else {
-            emit(.bufferProgress(nil))
+            emitBufferProgressIfChanged(nil)
             return
         }
         let current = currentTime()
         let dur = duration()
         guard let dur, dur > 0 else {
-            emit(.bufferProgress(nil))
+            emitBufferProgressIfChanged(nil)
             return
         }
         guard let range = item.loadedTimeRanges
@@ -82,9 +82,9 @@ extension AVPlayerEngine {
                 let start = $0.start.seconds
                 let end = start + $0.duration.seconds
                 return current >= start && current <= end + 0.5
-            })
+        })
         else {
-            emit(.bufferProgress(0))
+            emitBufferProgressIfChanged(0)
             return
         }
         let end = range.start.seconds + range.duration.seconds
@@ -93,6 +93,22 @@ extension AVPlayerEngine {
             : 30))
         let bufferedAhead = max(0, end - current)
         let progress = min(1, max(0, bufferedAhead / remainingWindow))
+        emitBufferProgressIfChanged(progress)
+    }
+
+    private func emitBufferProgressIfChanged(_ progress: Double?) {
+        if hasEmittedBufferProgress {
+            switch (lastBufferProgress, progress) {
+            case (nil, nil):
+                return
+            case let (previous?, current?) where abs(previous - current) < 0.02:
+                return
+            default:
+                break
+            }
+        }
+        hasEmittedBufferProgress = true
+        lastBufferProgress = progress
         emit(.bufferProgress(progress))
     }
 }

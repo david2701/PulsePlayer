@@ -52,6 +52,30 @@ struct SubtitleParserTests {
         #expect(SubtitlePresenter.activeText(in: track, mediaTime: 2) == nil)
     }
 
+    @Test func presenterReturnsAllOverlappingCuesInStartOrder() {
+        var track = SubtitleTrack(
+            format: .vtt,
+            cues: [
+                SubtitleCue(start: 8, end: 9, text: "late"),
+                SubtitleCue(start: 0, end: 10, text: "long"),
+                SubtitleCue(start: 4, end: 6, text: "middle"),
+            ]
+        )
+        #expect(
+            SubtitlePresenter.activeText(in: track, mediaTime: 5)
+                == "long\nmiddle"
+        )
+
+        track.cues = [
+            SubtitleCue(start: 1, end: 3, text: "replacement"),
+        ]
+        #expect(
+            SubtitlePresenter.activeText(in: track, mediaTime: 2)
+                == "replacement"
+        )
+        #expect(SubtitlePresenter.activeText(in: track, mediaTime: 5) == nil)
+    }
+
     @Test func detectFormat() {
         #expect(SubtitleFormat.detect(from: "WEBVTT\n\n") == .vtt)
         #expect(SubtitleFormat.detect(from: "1\n00:00:01,000 --> 00:00:02,000\nHi") == .srt)

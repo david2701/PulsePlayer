@@ -5,26 +5,39 @@ extension PlayerSession {
     public func play() {
         guard status != .invalidated else { return }
         wantsPlaying = true
-        activateAudioIfNeeded()
 
         switch status {
         case .loading:
             return
         case .ended:
-            Task { await seek(to: 0) }
-            _ = apply(.play)
-            engine.play()
-            emit(.playbackStarted)
-            refreshNowPlaying(rate: 1)
+            activateAudioIfNeeded()
+            restartTask?.cancel()
+            restartTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.seek(to: 0)
+                guard !Task.isCancelled, self.status != .invalidated else { return }
+                _ = self.apply(.play)
+                self.claimNowPlayingOwnership()
+                self.engine.play()
+                self.emit(.playbackStarted)
+                self.refreshNowPlaying(rate: self.playbackRate)
+            }
         case .ready, .buffering, .stalled, .playing:
+            activateAudioIfNeeded()
             if status == .ready {
                 _ = apply(.play)
             }
-            engine.play()
+            claimNowPlayingOwnership()
+            if playbackRate <= 0 || playbackRate == 1 {
+                playbackRate = 1
+                engine.play()
+            } else {
+                engine.setRate(playbackRate)
+            }
             if status == .playing {
                 emit(.playbackStarted)
             }
-            refreshNowPlaying(rate: 1)
+            refreshNowPlaying(rate: playbackRate)
         case .idle, .failed:
             break
         case .invalidated:
@@ -34,9 +47,14 @@ extension PlayerSession {
 
     public func pause() {
         guard status != .invalidated else { return }
+        let wasActivelyPlaying = status == .playing
+            || status == .buffering
+            || status == .stalled
+            || status == .ended
         wantsPlaying = false
         engine.pause()
-        if apply(.pause) != nil {
+        _ = apply(.pause)
+        if wasActivelyPlaying {
             emit(.playbackPaused)
             refreshNowPlaying(rate: 0)
             saveContinueWatchingIfNeeded()
@@ -52,7 +70,23 @@ extension PlayerSession {
     }
 
     public func setRate(_ rate: Float) {
-        engine.setRate(rate)
+        let value = max(0, rate)
+        guard value > 0 else {
+            pause()
+            return
+        }
+        playbackRate = value
+        wantsPlaying = true
+        switch status {
+        case .ready, .ended:
+            play()
+        case .playing, .buffering, .stalled:
+            claimNowPlayingOwnership()
+            engine.setRate(value)
+            refreshNowPlaying(rate: value)
+        case .loading, .idle, .failed, .invalidated:
+            break
+        }
     }
 
     public func setMuted(_ muted: Bool) {
@@ -98,37 +132,33 @@ extension PlayerSession {
             }
 
         case .bufferHealthy:
-            if status == .buffering || status == .stalled {
-                let started = rebufferStartedAt
-                if apply(.bufferHealthy) != nil {
-                    if let started {
-                        let elapsed = started.duration(to: dependencies.clock.now())
-                        recordRebuffer(duration: elapsed)
-                        emit(.rebufferEnded(duration: elapsed))
-                        emitMetricsSnapshot()
-                    }
-                    rebufferStartedAt = nil
-                    stallTask?.cancel()
-                    if wantsPlaying {
-                        engine.play()
-                    }
-                }
-            }
+            recoverFromBuffering(resumeEngine: wantsPlaying)
 
         case .didPlayToEnd:
             let live = currentSource?.isLive ?? false
             if live { return }
             if configuration.loop {
-                Task {
+                guard apply(.didPlayToEnd) != nil else { return }
+                wantsPlaying = true
+                _ = apply(.loopAdvance)
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
                     await seek(to: 0)
-                    if apply(.loopAdvance) != nil {
-                        engine.play()
-                        emit(.playbackStarted)
+                    guard self.status == .playing,
+                          !Task.isCancelled
+                    else { return }
+                    if self.playbackRate == 1 {
+                        self.engine.play()
+                    } else {
+                        self.engine.setRate(self.playbackRate)
                     }
+                    self.emit(.playbackStarted)
+                    self.refreshNowPlaying(rate: self.playbackRate)
                 }
             } else if apply(.didPlayToEnd) != nil {
                 wantsPlaying = false
                 emit(.ended)
+                refreshNowPlaying(rate: 0)
                 saveContinueWatchingIfNeeded()
                 if let queue = playbackQueue {
                     Task { await queue.handleSessionEnded() }
@@ -136,7 +166,9 @@ extension PlayerSession {
             }
 
         case .timeControlPlaying:
-            if status == .buffering || status == .ready {
+            if status == .buffering || status == .stalled {
+                recoverFromBuffering(resumeEngine: false)
+            } else if status == .ready {
                 _ = apply(.bufferHealthy)
             }
 
@@ -169,11 +201,15 @@ extension PlayerSession {
             if !isSeeking {
                 playbackTime = t
             }
-            emit(.position(t))
-            refreshNowPlaying()
+            if abs(t - lastPositionEventTime) >= 0.5 {
+                lastPositionEventTime = t
+                emit(.position(t))
+            }
             let mediaTime = isSeeking ? playbackTime : t
             refreshSubtitles(at: mediaTime)
             adCueTracker.tick(time: mediaTime)
+            updateEditorialTimeline(at: mediaTime)
+            updateLivePlayback(at: mediaTime)
             if currentSource?.isLive == true {
                 let atEdge = isAtLiveEdge
                 if atEdge, !wasAtLiveEdge {
@@ -206,7 +242,31 @@ extension PlayerSession {
         metrics.ttff = elapsed
         metrics.ttffMilliseconds = PlaybackMetrics.milliseconds(from: elapsed)
         emit(.firstFrame(elapsed: elapsed))
+        evaluatePerformanceBudget()
         emitMetricsSnapshot()
+    }
+
+    private func recoverFromBuffering(resumeEngine: Bool) {
+        guard status == .buffering || status == .stalled else { return }
+        let started = rebufferStartedAt
+        guard apply(.bufferHealthy) != nil else { return }
+        if let started {
+            let elapsed = started.duration(to: dependencies.clock.now())
+            recordRebuffer(duration: elapsed)
+            emit(.rebufferEnded(duration: elapsed))
+            evaluatePerformanceBudget()
+            emitMetricsSnapshot()
+        }
+        rebufferStartedAt = nil
+        stallTask?.cancel()
+        stallTask = nil
+        if resumeEngine {
+            if playbackRate == 1 {
+                engine.play()
+            } else {
+                engine.setRate(playbackRate)
+            }
+        }
     }
 
     func emitMetricsSnapshot() {

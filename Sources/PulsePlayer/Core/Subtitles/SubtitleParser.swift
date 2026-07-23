@@ -34,8 +34,7 @@ public enum SubtitlePresenter: Sendable {
         mediaTime: TimeInterval
     ) -> [SubtitleCue] {
         let t = mediaTime + track.offset
-        // Linear scan is fine for typical subtitle counts; binary search possible later.
-        return track.cues.filter { $0.contains(t) }
+        return track.activeCues(at: t)
     }
 
     public static func activeText(

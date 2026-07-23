@@ -4,8 +4,6 @@ public enum CoreMediaErrorMap: Sendable {
     public static func recoverability(domain: String, code: Int) -> Bool {
         // Fatal-ish media format / decode failures
         let fatalCodes: Set<Int> = [
-            -11800, // AVErrorUnknown
-            -11819, // AVErrorMediaServicesWereReset — recoverable actually
             -11828, // AVErrorFileFormatNotRecognized
             -11829, // AVErrorFileFailedToParse
             -11833, // content not authorized
@@ -16,10 +14,7 @@ public enum CoreMediaErrorMap: Sendable {
             return true
         }
         if domain == "AVFoundationErrorDomain" && fatalCodes.contains(code) {
-            // -11819 already returned
-            if code == -11828 || code == -11829 || code == -11833 || code == -11853 {
-                return false
-            }
+            return false
         }
         // Network-ish CoreMedia
         if domain == "CoreMediaErrorDomain" {

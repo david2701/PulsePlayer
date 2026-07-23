@@ -27,6 +27,29 @@ struct RetryPolicyTests {
         #expect(d <= 2.1)
     }
 
+    @Test func jitterIsSymmetricDeterministicAndBounded() {
+        let policy = RetryPolicy(
+            baseDelay: .seconds(1),
+            maxDelay: .seconds(10),
+            jitter: 0.2
+        )
+        #expect(
+            policy.delay(forAttempt: 1, randomUnit: 0).timeInterval == 0.8
+        )
+        #expect(
+            policy.delay(forAttempt: 1, randomUnit: 0.5).timeInterval == 1
+        )
+        #expect(
+            policy.delay(forAttempt: 1, randomUnit: 1).timeInterval == 1.2
+        )
+        #expect(
+            policy.delay(forAttempt: 1, randomUnit: -100).timeInterval == 0.8
+        )
+        #expect(
+            policy.delay(forAttempt: 1, randomUnit: 100).timeInterval == 1.2
+        )
+    }
+
     @Test func stallRecoveryBudget() {
         let policy = RetryPolicy(maxAttempts: 2)
         #expect(

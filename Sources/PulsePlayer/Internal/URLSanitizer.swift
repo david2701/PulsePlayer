@@ -7,6 +7,8 @@ public enum URLSanitizer: Sendable {
         "token", "access_token", "auth", "authorization", "sig", "signature",
         "jwt", "key", "apikey", "api_key", "expires", "expiry", "session",
         "password", "secret", "code", "id_token", "refresh_token",
+        "x-amz-credential", "x-amz-signature", "x-amz-security-token",
+        "x-goog-credential", "x-goog-signature", "policy", "key-pair-id",
     ]
 
     /// Header names redacted (case-insensitive substring match).
@@ -22,7 +24,7 @@ public enum URLSanitizer: Sendable {
         if let items = components.queryItems {
             components.queryItems = items.map { item in
                 let name = item.name.lowercased()
-                if queryDenylist.contains(name) {
+                if shouldRedactQuery(name) {
                     return URLQueryItem(name: item.name, value: "<redacted>")
                 }
                 return item
@@ -77,5 +79,16 @@ public enum URLSanitizer: Sendable {
     public static func shouldRedactHeader(_ name: String) -> Bool {
         let lower = name.lowercased()
         return headerDenylistSubstrings.contains { lower.contains($0) }
+    }
+
+    private static func shouldRedactQuery(_ name: String) -> Bool {
+        if queryDenylist.contains(name) {
+            return true
+        }
+        let normalized = name.replacingOccurrences(of: "_", with: "-")
+        return normalized.hasSuffix("-token")
+            || normalized.hasSuffix("-signature")
+            || normalized.hasSuffix("-credential")
+            || normalized.contains("secret")
     }
 }

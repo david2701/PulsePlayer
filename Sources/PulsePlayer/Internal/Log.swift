@@ -9,16 +9,16 @@ enum PulseLog {
 
     static func debug(_ message: String) {
         #if DEBUG
-        logger.debug("\(message, privacy: .public)")
+        logger.debug("\(message, privacy: .private(mask: .hash))")
         #endif
     }
 
     static func info(_ message: String) {
-        logger.info("\(message, privacy: .public)")
+        logger.info("\(message, privacy: .private(mask: .hash))")
     }
 
     static func error(_ message: String) {
-        logger.error("\(message, privacy: .public)")
+        logger.error("\(message, privacy: .private(mask: .hash))")
     }
 
     static func url(_ url: URL) -> String {

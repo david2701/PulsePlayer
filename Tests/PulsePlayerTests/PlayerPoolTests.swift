@@ -85,6 +85,55 @@ struct PlayerPoolTests {
         pool.shutdown()
     }
 
+    @Test func prewarmNeverEvictsAVisibleSession() async {
+        let (deps, _) = mockDeps()
+        var config = PlayerConfiguration.default
+        config.updatesNowPlayingInfo = false
+        let pool = PlayerPool(
+            size: 1,
+            configuration: config,
+            dependencies: deps,
+            maxPrewarmConcurrent: 3
+        )
+
+        let visible = await pool.acquire(
+            source: source("visible"),
+            priority: .visible
+        )
+        await pool.prewarm([source("next-a"), source("next-b")])
+
+        #expect(pool.sessions.count == 1)
+        #expect(pool.session(for: "visible")?.id == visible.id)
+        #expect(pool.session(for: "next-a") == nil)
+        #expect(pool.session(for: "next-b") == nil)
+        pool.shutdown()
+    }
+
+    @Test func concurrentPrewarmReservesOnlyAvailableCapacity() async {
+        let (deps, _) = mockDeps()
+        var config = PlayerConfiguration.default
+        config.updatesNowPlayingInfo = false
+        let pool = PlayerPool(
+            size: 2,
+            configuration: config,
+            dependencies: deps,
+            maxPrewarmConcurrent: 4
+        )
+
+        await pool.prewarm([
+            source("a"),
+            source("b"),
+            source("c"),
+            source("a"),
+        ])
+
+        #expect(pool.sessions.count == 2)
+        #expect(pool.session(for: "a") != nil)
+        #expect(pool.session(for: "b") != nil)
+        #expect(pool.session(for: "c") == nil)
+        pool.shutdown()
+    }
+
     @Test func poolPriorityOrder() {
         #expect(PoolPriority.distant < PoolPriority.next)
         #expect(PoolPriority.next < PoolPriority.visible)

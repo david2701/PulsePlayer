@@ -23,7 +23,7 @@ extension PlayerSession {
 
         qualityMasterURL = source.url
         do {
-            let qualities = try await HLSMasterParser.fetchQualities(from: source.url)
+            let qualities = try await HLSMasterParser.fetchQualities(for: source)
             guard !Task.isCancelled else { return }
             availableQualities = qualities
             emit(.qualitiesUpdated(count: qualities.count))
@@ -119,7 +119,6 @@ extension PlayerSession {
 
         loadGeneration &+= 1
         let gen = loadGeneration
-        isQualityReload = true
         currentError = nil
         scrubPreviewImage = nil
         wasAtLiveEdge = false
@@ -145,13 +144,10 @@ extension PlayerSession {
                 playbackTime = engine.currentTime()
             }
             applySoftConstraints(selectedQuality)
-            isQualityReload = false
             emitMetricsSnapshot()
         } catch is CancellationError {
-            isQualityReload = false
             return
         } catch {
-            isQualityReload = false
             guard gen == loadGeneration else { return }
             let ns = error as NSError
             fail(with: .assetLoadFailed(

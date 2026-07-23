@@ -87,6 +87,24 @@ extension AVPlayerEngine {
                 self.probeAccessLog(item)
             }
         }
+
+        errorLogObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemNewErrorLogEntry,
+            object: item,
+            queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, gen == self.currentGeneration,
+                      let event = item.errorLog()?.events.last
+                else { return }
+                let comment = event.errorComment.map(URLSanitizer.sanitizeMessage)
+                self.emitProduction(.diagnostic(.errorLog(
+                    domain: event.errorDomain,
+                    statusCode: event.errorStatusCode,
+                    comment: comment
+                )))
+            }
+        }
     }
 
     func tearDownItemObservers() {
@@ -108,6 +126,10 @@ extension AVPlayerEngine {
             NotificationCenter.default.removeObserver(accessLogObserver)
             self.accessLogObserver = nil
         }
+        if let errorLogObserver {
+            NotificationCenter.default.removeObserver(errorLogObserver)
+            self.errorLogObserver = nil
+        }
     }
 
     private func probeAccessLog(_ item: AVPlayerItem) {
@@ -120,9 +142,17 @@ extension AVPlayerEngine {
         } else {
             changed = indicated != lastIndicatedBps || observed != lastObservedBps
         }
-        guard changed else { return }
-        lastIndicatedBps = indicated
-        lastObservedBps = observed
-        emit(.accessLog(indicatedBps: indicated, observedBps: observed))
+        if changed {
+            lastIndicatedBps = indicated
+            lastObservedBps = observed
+            emit(.accessLog(indicatedBps: indicated, observedBps: observed))
+        }
+        emitProduction(.diagnostic(.accessLog(
+            indicatedBitrate: indicated,
+            observedBitrate: observed,
+            droppedVideoFrames: event.numberOfDroppedVideoFrames,
+            stalls: event.numberOfStalls,
+            segmentsDownloaded: event.numberOfMediaRequests
+        )))
     }
 }

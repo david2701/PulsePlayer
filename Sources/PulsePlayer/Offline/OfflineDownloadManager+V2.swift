@@ -21,18 +21,21 @@ extension OfflineDownloadManager {
         guard let existing = item(id: id) else {
             throw PlayerError.invalidSource("Unknown offline id \(id)")
         }
-        if existing.state == .completed, existing.localFileURL != nil {
+        if existing.isPlayableOffline {
             return existing
         }
-        store.remove(id: id)
         if let url = existing.localFileURL {
-            try? FileManager.default.removeItem(at: url)
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
         }
+        try store.removePersisting(id: id)
         refreshItems()
         return try enqueue(
             sourceURL: existing.sourceURL,
             id: existing.id,
-            title: existing.title
+            title: existing.title,
+            contentKeyAssetId: existing.contentKeyAssetId
         )
     }
 
@@ -46,7 +49,7 @@ extension OfflineDownloadManager {
         if let existing = item(id: id) {
             switch existing.state {
             case .completed:
-                return existing
+                return existing.isPlayableOffline ? existing : try retry(id: id)
             case .downloading, .queued:
                 return existing
             case .failed, .cancelled:
@@ -57,26 +60,64 @@ extension OfflineDownloadManager {
     }
 
     public func usedStorageBytes() -> Int64 {
-        var total: Int64 = 0
-        for item in store.all() where item.state == .completed {
-            guard let url = item.localFileURL else { continue }
-            if let values = try? url.resourceValues(forKeys: [
-                .totalFileAllocatedSizeKey, .fileSizeKey,
-            ]) {
-                total += Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
+        storageEntries().reduce(0) { $0 + $1.bytes }
+    }
+
+    private func storageEntries() -> [(item: OfflineDownloadItem, bytes: Int64)] {
+        store.all().compactMap { item in
+            guard item.state == .completed, let url = item.localFileURL else {
+                return nil
             }
+            return (item, Self.allocatedBytes(at: url))
+        }
+    }
+
+    private static func allocatedBytes(at url: URL) -> Int64 {
+        let keys: Set<URLResourceKey> = [
+            .isRegularFileKey,
+            .totalFileAllocatedSizeKey,
+            .fileAllocatedSizeKey,
+            .fileSizeKey,
+        ]
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles]
+        ) else {
+            let values = try? url.resourceValues(forKeys: keys)
+            return Int64(
+                values?.totalFileAllocatedSize
+                    ?? values?.fileAllocatedSize
+                    ?? values?.fileSize
+                    ?? 0
+            )
+        }
+
+        var total: Int64 = 0
+        for case let fileURL as URL in enumerator {
+            guard let values = try? fileURL.resourceValues(forKeys: keys),
+                  values.isRegularFile == true
+            else { continue }
+            total += Int64(
+                values.totalFileAllocatedSize
+                    ?? values.fileAllocatedSize
+                    ?? values.fileSize
+                    ?? 0
+            )
         }
         return total
     }
 
     public func enforceStorageLimit() throws {
         guard let limit = Self.storageLimitBytes else { return }
-        var completed = store.all()
-            .filter { $0.state == .completed }
-            .sorted { $0.createdAt < $1.createdAt }
-        while usedStorageBytes() > limit, let oldest = completed.first {
-            try remove(id: oldest.id)
-            completed.removeFirst()
+        var entries = storageEntries().sorted {
+            $0.item.createdAt < $1.item.createdAt
+        }
+        var total = entries.reduce(Int64(0)) { $0 + $1.bytes }
+        while total > limit, let oldest = entries.first {
+            try remove(id: oldest.item.id)
+            total -= oldest.bytes
+            entries.removeFirst()
         }
     }
 }

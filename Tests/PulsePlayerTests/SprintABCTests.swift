@@ -23,6 +23,26 @@ struct SprintABCTests {
         #expect(q.first?.supportsHardLock == true)
     }
 
+    @Test func hlsMasterParserIgnoresVariantWithoutURI() {
+        let master = """
+        #EXTM3U
+        #EXT-X-STREAM-INF:BANDWIDTH=100000
+        # a comment, but no URI
+        #EXT-X-STREAM-INF:BANDWIDTH=200000
+        valid.m3u8
+        """
+        let qualities = HLSMasterParser.parseQualities(
+            from: master,
+            baseURL: URL(string: "https://example.com/master.m3u8")!
+        )
+        #expect(qualities.count == 1)
+        #expect(qualities[0].bandwidth == 200_000)
+        #expect(
+            qualities[0].playlistURL?.absoluteString
+                == "https://example.com/valid.m3u8"
+        )
+    }
+
     @Test func continueWatchingSaveAndClearNearEnd() {
         let store = ContinueWatchingStore(
             defaults: UserDefaults(suiteName: "pulse.test.\(UUID().uuidString)")!
@@ -45,8 +65,8 @@ struct SprintABCTests {
         let session = PlayerSession(configuration: config, dependencies: deps)
         let queue = PlaybackQueue(
             items: [
-                MediaSource(id: "a", url: URL(string: "https://example.com/a.m3u8")!),
-                MediaSource(id: "b", url: URL(string: "https://example.com/b.m3u8")!),
+                MediaSource(id: "a", url: URL(string: "https://example.com/a.mp4")!),
+                MediaSource(id: "b", url: URL(string: "https://example.com/b.mp4")!),
             ],
             autoplayNext: true
         )
@@ -88,7 +108,7 @@ struct SprintABCTests {
         config.preferHardQualityLock = true
         config.autoplay = false
         let session = PlayerSession(configuration: config, dependencies: deps)
-        let master = URL(string: "https://cdn.example.com/master.m3u8")!
+        let master = URL(string: "https://cdn.example.com/master.mp4")!
         let variant = URL(string: "https://cdn.example.com/720.m3u8")!
         await session.load(MediaSource(id: "ep", url: master, title: "Q"))
         let locked = StreamQuality(
@@ -119,7 +139,7 @@ struct SprintABCTests {
         config.updatesNowPlayingInfo = false
         let session = PlayerSession(configuration: config, dependencies: deps)
         await session.load(
-            MediaSource(id: "live", url: URL(string: "https://example.com/live.m3u8")!, isLive: true)
+            MediaSource(id: "live", url: URL(string: "https://example.com/live.mp4")!, isLive: true)
         )
         #expect(session.clampLiveSeek(50) == 100)
         #expect(session.clampLiveSeek(250) == 200)

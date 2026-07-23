@@ -18,12 +18,22 @@ extension PlayerSession {
         engine.applyConfiguration(configuration)
         engine.setMuted(configuration.isMuted)
         if !configuration.updatesNowPlayingInfo {
-            clearNowPlaying()
+            releaseNowPlayingOwnership(clear: true)
         } else {
+            if isPlaying {
+                claimNowPlayingOwnership()
+            }
             refreshNowPlaying()
         }
         if !configuration.allowsPictureInPicture {
             pipController.tearDown()
+        }
+        if configuration.managesAudioSession {
+            if isPlaying {
+                activateAudioIfNeeded()
+            }
+        } else {
+            deactivateAudioIfNeeded()
         }
     }
 }

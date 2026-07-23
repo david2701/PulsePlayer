@@ -62,7 +62,9 @@ public final class PlayerPool {
         revision &+= 1
     }
 
-    /// Acquire a session for `source`, loading content. May evict lower-priority entries.
+    /// Acquire a session for `source`, loading content. May evict equal/lower-priority
+    /// entries. If every resident has higher priority, the returned session is
+    /// caller-owned and is not retained by the pool.
     @discardableResult
     public func acquire(
         source: MediaSource,
@@ -77,8 +79,18 @@ public final class PlayerPool {
             return session
         }
 
-        await ensureCapacity(for: priority)
+        let retained = await ensureCapacity(for: priority)
         let session = makeSession()
+        if !retained {
+            var loadConfig = configuration
+            loadConfig.autoplay = (priority == .visible)
+            _ = session.updateConfiguration { $0 = loadConfig }
+            await session.load(source)
+            if priority == .visible {
+                session.play()
+            }
+            return session
+        }
         entries.append(
             Entry(
                 session: session,
@@ -102,20 +114,35 @@ public final class PlayerPool {
 
     /// Preload sources at `.next` priority (max concurrent loads limited).
     public func prewarm(_ sources: [MediaSource]) async {
-        prewarmTask?.cancel()
+        if let previous = prewarmTask {
+            previous.cancel()
+            await previous.value
+        }
         prewarmTask = Task { @MainActor in
-            var queue = sources
+            var knownIDs = Set(self.entries.compactMap(\.sourceID))
+            var queue: [MediaSource] = []
+            for source in sources where !knownIDs.contains(source.id) {
+                guard self.entries.count + queue.count < self.size else { break }
+                knownIDs.insert(source.id)
+                queue.append(source)
+            }
+
             while !queue.isEmpty {
                 if Task.isCancelled { return }
                 let batch = Array(queue.prefix(self.maxPrewarmConcurrent))
                 queue.removeFirst(min(self.maxPrewarmConcurrent, queue.count))
-                for source in batch {
-                    if Task.isCancelled { return }
-                    if self.session(for: source.id) != nil { continue }
-                    await self.acquire(source: source, priority: .next)
-                    // Prewarm should not autoplay.
-                    if let s = self.session(for: source.id) {
-                        s.pause()
+
+                let reserved = batch.compactMap { source in
+                    self.reservePrewarm(source).map { (source, $0) }
+                }
+                await withTaskGroup(of: Void.self) { group in
+                    for (source, sessionID) in reserved {
+                        group.addTask {
+                            await self.loadReservedPrewarm(
+                                source,
+                                sessionID: sessionID
+                            )
+                        }
                     }
                 }
             }
@@ -202,13 +229,14 @@ public final class PlayerPool {
         session.play()
     }
 
-    private func ensureCapacity(for priority: PoolPriority) async {
+    private func ensureCapacity(for priority: PoolPriority) async -> Bool {
         while entries.count >= size {
             guard let victimIndex = evictionIndex(preferringBelow: priority) else {
-                break
+                return false
             }
             await evict(at: victimIndex)
         }
+        return true
     }
 
     private func trimToSize() async {
@@ -227,9 +255,8 @@ public final class PlayerPool {
 
     /// Pick lowest priority; tie-break oldest `lastUsed`.
     private func evictionIndex(preferringBelow: PoolPriority) -> Int? {
-        let candidates = entries.indices.filter { entries[$0].priority < preferringBelow }
-        let pool = candidates.isEmpty ? Array(entries.indices) : candidates
-        return pool.min { a, b in
+        let candidates = entries.indices.filter { entries[$0].priority <= preferringBelow }
+        return candidates.min { a, b in
             let ea = entries[a]
             let eb = entries[b]
             if ea.priority != eb.priority {
@@ -237,6 +264,64 @@ public final class PlayerPool {
             }
             return ea.lastUsed < eb.lastUsed
         }
+    }
+
+    private func reservePrewarm(_ source: MediaSource) -> UUID? {
+        guard entries.count < size,
+              session(for: source.id) == nil
+        else { return nil }
+        let session = makeSession()
+        entries.append(
+            Entry(
+                session: session,
+                sourceID: source.id,
+                priority: .next,
+                lastUsed: ContinuousClock.now
+            )
+        )
+        noteChange()
+        return session.id
+    }
+
+    private func loadReservedPrewarm(
+        _ source: MediaSource,
+        sessionID: UUID
+    ) async {
+        guard !Task.isCancelled,
+              let entry = entries.first(where: {
+                  $0.sourceID == source.id && $0.session.id == sessionID
+              })
+        else {
+            await discardReservedPrewarm(
+                sourceID: source.id,
+                sessionID: sessionID
+            )
+            return
+        }
+        let session = entry.session
+        await session.load(source)
+        guard !Task.isCancelled else {
+            await discardReservedPrewarm(
+                sourceID: source.id,
+                sessionID: sessionID
+            )
+            return
+        }
+        session.pause()
+    }
+
+    private func discardReservedPrewarm(
+        sourceID: String,
+        sessionID: UUID
+    ) async {
+        guard let index = entries.firstIndex(where: {
+            $0.sourceID == sourceID
+                && $0.session.id == sessionID
+                && $0.priority == .next
+        }) else { return }
+        let entry = entries.remove(at: index)
+        noteChange()
+        await entry.session.reset()
     }
 
     private func evict(at index: Int) async {

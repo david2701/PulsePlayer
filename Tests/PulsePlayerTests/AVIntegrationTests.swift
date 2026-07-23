@@ -3,32 +3,21 @@ import Testing
 @testable import PulsePlayer
 
 /// Real AVPlayer smoke tests against Apple sample HLS.
-/// Skips cleanly when the network is unreachable (offline CI agents).
-@Suite("AV integration")
+/// Opt in explicitly so a missing network can never be reported as a passing test.
+@Suite(
+    "AV integration",
+    .enabled(
+        if: ProcessInfo.processInfo.environment["PULSEPLAYER_RUN_NETWORK_TESTS"] == "1",
+        "Set PULSEPLAYER_RUN_NETWORK_TESTS=1 to run network integration tests."
+    )
+)
 struct AVIntegrationTests {
     private static let bipbop = URL(string:
         "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8"
     )!
 
-    private static func networkReachable() async -> Bool {
-        do {
-            var request = URLRequest(url: bipbop)
-            request.httpMethod = "HEAD"
-            request.timeoutInterval = 8
-            let (_, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else { return false }
-            return (200...399).contains(http.statusCode)
-        } catch {
-            return false
-        }
-    }
-
     @Test @MainActor
     func realHLSBecomesReady() async throws {
-        guard await Self.networkReachable() else {
-            return // skip offline
-        }
-
         var config = PlayerConfiguration.default
         config.autoplay = false
         config.updatesNowPlayingInfo = false
@@ -45,8 +34,8 @@ struct AVIntegrationTests {
                 break
             }
             if session.status == .failed {
-                // Transient CDN / network — don't fail the suite hard.
-                return
+                Issue.record("HLS load failed: \(session.currentError?.userMessage ?? "unknown error")")
+                break
             }
             try await Task.sleep(for: .milliseconds(400))
         }
@@ -58,8 +47,6 @@ struct AVIntegrationTests {
 
     @Test @MainActor
     func realHLSPlaySeek() async throws {
-        guard await Self.networkReachable() else { return }
-
         var config = PlayerConfiguration.default
         config.autoplay = true
         config.updatesNowPlayingInfo = false
@@ -75,9 +62,13 @@ struct AVIntegrationTests {
                 ok = true
                 break
             }
-            if session.status == .failed { return }
+            if session.status == .failed {
+                Issue.record("HLS playback failed: \(session.currentError?.userMessage ?? "unknown error")")
+                break
+            }
             try await Task.sleep(for: .milliseconds(400))
         }
+        #expect(ok)
         guard ok else { return }
 
         await session.seek(to: 5)

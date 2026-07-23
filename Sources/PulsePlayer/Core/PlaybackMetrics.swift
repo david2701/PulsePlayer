@@ -2,10 +2,12 @@ import Foundation
 
 /// Aggregate QoE counters for the current (or last) session load cycle.
 public struct PlaybackMetrics: Sendable, Equatable {
-    /// How many times `load` was invoked on this session (including quality reloads counted separately).
+    /// How many primary `load` calls were invoked on this session.
     public var loadCount: Int
     /// Hard quality switches (variant playlist reloads).
     public var qualitySwitchCount: Int
+    public var credentialRefreshCount: Int
+    public var sourceFallbackCount: Int
     /// Time to first frame for the latest successful playback start.
     public var ttff: Duration?
     public var ttffMilliseconds: Double?
@@ -38,6 +40,8 @@ public struct PlaybackMetrics: Sendable, Equatable {
     ) {
         self.loadCount = loadCount
         self.qualitySwitchCount = qualitySwitchCount
+        self.credentialRefreshCount = 0
+        self.sourceFallbackCount = 0
         self.ttff = ttff
         self.ttffMilliseconds = ttffMilliseconds
         self.rebufferCount = rebufferCount

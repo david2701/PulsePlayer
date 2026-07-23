@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "PulsePlayer",
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v17),
         .tvOS(.v17),
@@ -16,6 +17,9 @@ let package = Package(
         .target(
             name: "PulsePlayer",
             path: "Sources/PulsePlayer",
+            resources: [
+                .process("Resources"),
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]

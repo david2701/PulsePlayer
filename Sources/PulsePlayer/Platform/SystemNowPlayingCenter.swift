@@ -5,6 +5,8 @@ import MediaPlayer
 /// Handlers are removed by stored tokens (does not wipe other app targets).
 @MainActor
 public final class SystemNowPlayingCenter: NowPlayingCentering {
+    public static let shared = SystemNowPlayingCenter()
+
     public struct CommandHandlers: Sendable {
         public var play: @MainActor @Sendable () -> Void
         public var pause: @MainActor @Sendable () -> Void
@@ -32,6 +34,8 @@ public final class SystemNowPlayingCenter: NowPlayingCentering {
 
     private var handlers: CommandHandlers?
     private var tokens: [Any] = []
+    private var activeOwner: UUID?
+    private var ownerHandlers: [UUID: CommandHandlers] = [:]
 
     public init() {}
 
@@ -43,6 +47,51 @@ public final class SystemNowPlayingCenter: NowPlayingCentering {
         }
     }
 
+    package func register(owner: UUID, handlers: CommandHandlers) {
+        ownerHandlers[owner] = handlers
+        if activeOwner == owner {
+            setCommandHandlers(handlers)
+        }
+    }
+
+    package func activate(owner: UUID) {
+        guard activeOwner != owner else { return }
+        activeOwner = owner
+        setCommandHandlers(ownerHandlers[owner])
+    }
+
+    package func deactivate(owner: UUID, clear: Bool) {
+        guard activeOwner == owner else { return }
+        activeOwner = nil
+        setCommandHandlers(nil)
+        if clear {
+            self.clear()
+        }
+    }
+
+    package func unregister(owner: UUID, clear: Bool) {
+        ownerHandlers[owner] = nil
+        deactivate(owner: owner, clear: clear)
+    }
+
+    package func update(
+        owner: UUID,
+        title: String?,
+        subtitle: String?,
+        elapsed: TimeInterval,
+        duration: TimeInterval?,
+        rate: Float
+    ) {
+        guard activeOwner == owner else { return }
+        update(
+            title: title,
+            subtitle: subtitle,
+            elapsed: elapsed,
+            duration: duration,
+            rate: rate
+        )
+    }
+
     public func update(
         title: String?,
         subtitle: String?,
@@ -50,7 +99,7 @@ public final class SystemNowPlayingCenter: NowPlayingCentering {
         duration: TimeInterval?,
         rate: Float
     ) {
-        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        var info: [String: Any] = [:]
         if let title { info[MPMediaItemPropertyTitle] = title }
         if let subtitle { info[MPMediaItemPropertyArtist] = subtitle }
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsed

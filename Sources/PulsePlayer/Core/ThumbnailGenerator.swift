@@ -26,24 +26,38 @@ public final class ThumbnailGenerator {
         generation &+= 1
     }
 
+    public func cancelPending() {
+        generator?.cancelAllCGImageGeneration()
+        generation &+= 1
+    }
+
     public func image(at time: TimeInterval) async -> CGImage? {
         guard let generator else { return nil }
+        generator.cancelAllCGImageGeneration()
+        generation &+= 1
         let genId = generation
         let cm = CMTime(seconds: max(0, time), preferredTimescale: 600)
-        return await withCheckedContinuation { cont in
-            generator.generateCGImagesAsynchronously(forTimes: [NSValue(time: cm)]) {
-                _, image, _, result, _ in
-                Task { @MainActor in
-                    guard genId == self.generation else {
-                        cont.resume(returning: nil)
-                        return
-                    }
-                    if result == .succeeded {
-                        cont.resume(returning: image)
-                    } else {
-                        cont.resume(returning: nil)
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { cont in
+                generator.generateCGImagesAsynchronously(forTimes: [NSValue(time: cm)]) {
+                    _, image, _, result, _ in
+                    Task { @MainActor in
+                        guard genId == self.generation else {
+                            cont.resume(returning: nil)
+                            return
+                        }
+                        if result == .succeeded {
+                            cont.resume(returning: image)
+                        } else {
+                            cont.resume(returning: nil)
+                        }
                     }
                 }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                guard let self, genId == self.generation else { return }
+                self.cancelPending()
             }
         }
     }

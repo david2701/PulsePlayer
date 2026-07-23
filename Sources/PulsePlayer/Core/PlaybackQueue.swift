@@ -22,6 +22,11 @@ public final class PlaybackQueue {
         items.indices.contains(currentIndex) ? items[currentIndex] : nil
     }
 
+    public var nextItem: MediaSource? {
+        let index = currentIndex + 1
+        return items.indices.contains(index) ? items[index] : nil
+    }
+
     public var hasNext: Bool { currentIndex + 1 < items.count }
     public var hasPrevious: Bool { currentIndex > 0 }
 

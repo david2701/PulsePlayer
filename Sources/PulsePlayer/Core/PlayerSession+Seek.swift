@@ -5,15 +5,23 @@ extension PlayerSession {
     /// Seek to absolute media time (seconds). Updates `playbackTime` immediately for UI.
     public func seek(to time: TimeInterval) async {
         guard status != .invalidated, status != .idle else { return }
+        seekGeneration &+= 1
+        let generation = seekGeneration
+        (engine as? any ManagedPlaybackControlling)?.cancelPendingSeeks()
         let upper = playbackDuration ?? engine.duration() ?? .greatestFiniteMagnitude
         var target = min(max(0, time), max(0, upper))
         target = clampLiveSeek(target)
         isSeeking = true
         playbackTime = target
-        defer { isSeeking = false }
+        defer {
+            if generation == seekGeneration {
+                isSeeking = false
+            }
+        }
 
         do {
             try await engine.seek(to: target)
+            guard generation == seekGeneration, !Task.isCancelled else { return }
             let actual = engine.currentTime()
             playbackTime = actual
             emit(.seekCompleted(time: actual))
@@ -44,16 +52,25 @@ extension PlayerSession {
         playbackTime = clampLiveSeek(max(0, time))
         refreshSubtitles(at: playbackTime)
         thumbnailTask?.cancel()
+        (engine as? any ManagedPlaybackControlling)?.cancelThumbnailGeneration()
+        thumbnailGeneration &+= 1
+        let generation = thumbnailGeneration
         let t = playbackTime
         thumbnailTask = Task { @MainActor [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: .milliseconds(80))
             guard !Task.isCancelled else { return }
-            self.scrubPreviewImage = await self.engine.thumbnail(at: t)
+            let image = await self.engine.thumbnail(at: t)
+            guard !Task.isCancelled, generation == self.thumbnailGeneration else { return }
+            self.scrubPreviewImage = image
         }
     }
 
     public func endScrub(commit time: TimeInterval) async {
+        thumbnailTask?.cancel()
+        thumbnailTask = nil
+        (engine as? any ManagedPlaybackControlling)?.cancelThumbnailGeneration()
+        thumbnailGeneration &+= 1
         scrubPreviewImage = nil
         await seek(to: time)
     }

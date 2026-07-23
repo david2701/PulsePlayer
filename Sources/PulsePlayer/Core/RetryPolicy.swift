@@ -24,8 +24,13 @@ public struct RetryPolicy: Sendable, Equatable {
 
     public static let `default` = RetryPolicy()
 
-    /// Delay before attempt `attempt` (1-based). Pure and testable.
+    /// Jittered delay before attempt `attempt` (1-based).
     public func delay(forAttempt attempt: Int) -> Duration {
+        delay(forAttempt: attempt, randomUnit: Double.random(in: 0...1))
+    }
+
+    /// Deterministic variant used by package tests. `randomUnit` is clamped to `0...1`.
+    package func delay(forAttempt attempt: Int, randomUnit: Double) -> Duration {
         let clamped = max(1, attempt)
         let baseNs = Double(baseDelay.components.seconds) * 1_000_000_000
             + Double(baseDelay.components.attoseconds) / 1_000_000_000
@@ -33,9 +38,9 @@ public struct RetryPolicy: Sendable, Equatable {
             + Double(maxDelay.components.attoseconds) / 1_000_000_000
         let exp = min(maxNs, baseNs * pow(2.0, Double(clamped - 1)))
         let j = max(0, min(1, jitter))
-        // Deterministic mid-jitter for pure unit tests; session may re-seed.
-        let factor = 1.0 + (j * 0.5)
-        let ns = exp * factor
+        let sample = max(0, min(1, randomUnit))
+        let factor = 1.0 + ((sample * 2 - 1) * j)
+        let ns = min(maxNs, max(0, exp * factor))
         return .nanoseconds(Int64(ns))
     }
 }

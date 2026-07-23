@@ -108,9 +108,13 @@ public final class HTTPContentKeyProvider: ContentKeyProviding {
     private func validate(response: URLResponse, context: String) throws {
         guard let http = response as? HTTPURLResponse else { return }
         guard (200...299).contains(http.statusCode) else {
-            throw PlayerError.assetLoadFailed(
-                underlying: "FairPlay \(context) HTTP \(http.statusCode)",
-                recoverable: http.statusCode >= 500 || http.statusCode == 408
+            throw PlayerError.itemFailed(
+                domain: "HTTP",
+                code: http.statusCode,
+                message: "FairPlay \(context) HTTP \(http.statusCode)",
+                recoverable: http.statusCode >= 500
+                    || http.statusCode == 408
+                    || http.statusCode == 429
             )
         }
     }

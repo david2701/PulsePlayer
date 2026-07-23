@@ -13,11 +13,18 @@ extension PlayerSession {
 
         qualityTask?.cancel()
         qualityTask = nil
+        let wasLoading = status == .loading
         cancelLoadWork()
+        cancelInteractiveWork()
+        if wasLoading {
+            _ = apply(.loadCancelled)
+        }
         loadGeneration &+= 1
         let gen = loadGeneration
-        isQualityReload = false
         qualityHardLocked = false
+        playbackID = UUID()
+        sourceFallbackIndex = 0
+        recoveryOriginalSource = source
 
         wantsPlaying = configuration.autoplay
         didEmitFirstFrame = false
@@ -45,6 +52,7 @@ extension PlayerSession {
         indicatedBitrate = nil
         observedBitrate = nil
         bufferProgressValue = nil
+        clearProductionFeatureState()
         wasAtLiveEdge = false
         availableQualities = []
         selectedQualityId = StreamQuality.auto.id
@@ -55,13 +63,27 @@ extension PlayerSession {
         loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await self.engine.replaceCurrentItem(with: source)
+                let (resolvedSource, credentials) = try await self.sourceWithFreshCredentials(
+                    source,
+                    reason: .initialLoad
+                )
                 guard gen == self.loadGeneration, !Task.isCancelled else { return }
-                await self.refreshQualities(for: source)
+                self.currentSource = resolvedSource
+                try await self.engine.replaceCurrentItem(with: resolvedSource)
+                guard gen == self.loadGeneration, !Task.isCancelled else { return }
+                await self.refreshQualities(for: resolvedSource)
+                self.scheduleCredentialRefresh(
+                    credentials: credentials,
+                    source: resolvedSource
+                )
             } catch is CancellationError {
                 return
             } catch {
                 guard gen == self.loadGeneration else { return }
+                if let playerError = error as? PlayerError {
+                    self.fail(with: playerError)
+                    return
+                }
                 let ns = error as NSError
                 if ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled {
                     return
@@ -84,35 +106,67 @@ extension PlayerSession {
 
     public func reset() async {
         guard status != .invalidated else { return }
+        qualityTask?.cancel()
+        qualityTask = nil
         cancelLoadWork()
+        cancelInteractiveWork()
         loadGeneration &+= 1
         wantsPlaying = false
         currentError = nil
         currentSource = nil
+        recoveryOriginalSource = nil
         didEmitFirstFrame = false
         retryAttemptsUsed = 0
+        frozenRetryPolicy = nil
+        pendingStartAt = nil
+        playbackTime = 0
+        playbackDuration = nil
+        indicatedBitrate = nil
+        observedBitrate = nil
+        bufferProgressValue = nil
+        availableQualities = []
+        selectedQualityId = StreamQuality.auto.id
+        qualityMasterURL = nil
+        qualityHardLocked = false
+        scrubPreviewImage = nil
+        rebufferStartedAt = nil
+        clearProductionFeatureState()
+        didEmitFirstFrame = false
+        wasAtLiveEdge = false
+        lastPositionEventTime = -.infinity
         clearSubtitles()
         engine.pause()
-        // Replace with empty by tearing item via a dummy cancel — engine keeps player.
-        // Full clear: tearDown not called so session reusable; load next source.
+        (engine as? any ManagedPlaybackControlling)?.clearCurrentItem()
+        adCueTracker.clear()
+        releaseNowPlayingOwnership(clear: true)
+        deactivateAudioIfNeeded()
         _ = apply(.reset)
-        emit(.warning("reset"))
     }
 
     public func invalidate() {
+        guard status != .invalidated else { return }
+        qualityTask?.cancel()
+        qualityTask = nil
         cancelLoadWork()
+        cancelInteractiveWork()
         loadGeneration &+= 1
         pipController.tearDown()
-        clearNowPlaying()
+        unregisterNowPlayingOwnership(clear: true)
         clearSubtitles()
-        if let np = dependencies.nowPlaying as? SystemNowPlayingCenter {
-            np.setCommandHandlers(nil)
-        }
+        adCueTracker.clear()
+        clearProductionFeatureState()
+        deactivateAudioIfNeeded()
         engine.tearDown()
-        eventBus.finish()
+        audioEventTask?.cancel()
+        audioEventTask = nil
+        lifecycleEventTask?.cancel()
+        lifecycleEventTask = nil
         currentSource = nil
         currentError = .sessionInvalidated
         _ = apply(.invalidate)
+        eventBus.finish()
+        productionEventBus.finish()
+        telemetryDispatcher.finish()
     }
 
     func startStartupWatchdog(generation gen: UInt64) {
@@ -126,6 +180,10 @@ extension PlayerSession {
                 return
             }
             guard gen == self.loadGeneration, self.status == .loading else { return }
+            self.loadTask?.cancel()
+            self.loadTask = nil
+            self.loadGeneration &+= 1
+            (self.engine as? any ManagedPlaybackControlling)?.clearCurrentItem()
             self.fail(with: .startupTimedOut)
         }
     }
@@ -159,9 +217,10 @@ extension PlayerSession {
             pendingStartAt = nil
         }
 
-        let shouldPlay = wantsPlaying || configuration.autoplay
+        let shouldPlay = wantsPlaying
         if shouldPlay {
             activateAudioIfNeeded()
+            claimNowPlayingOwnership()
             if status == .ready {
                 _ = apply(.autoplayGate)
             }
@@ -170,9 +229,13 @@ extension PlayerSession {
                 if status == .ready {
                     _ = apply(.play)
                 }
-                engine.play()
+                if playbackRate == 1 {
+                    engine.play()
+                } else {
+                    engine.setRate(playbackRate)
+                }
                 emit(.playbackStarted)
-                refreshNowPlaying(rate: 1)
+                refreshNowPlaying(rate: playbackRate)
             }
         } else {
             refreshNowPlaying(rate: 0)

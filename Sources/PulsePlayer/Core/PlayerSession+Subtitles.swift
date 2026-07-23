@@ -2,7 +2,7 @@ import Foundation
 
 @MainActor
 extension PlayerSession {
-    /// Load and parse a remote or local subtitle file, then optionally select it.
+    /// Source-compatible 1.0 subtitle loader.
     @discardableResult
     public func addSubtitle(
         from url: URL,
@@ -13,21 +13,39 @@ extension PlayerSession {
         offset: TimeInterval = 0,
         select: Bool = true
     ) async throws -> SubtitleTrack {
-        let data: Data
-        if url.isFileURL {
-            data = try Data(contentsOf: url)
-        } else {
-            let (bytes, response) = try await URLSession.shared.data(from: url)
-            if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-                throw PlayerError.assetLoadFailed(
-                    underlying: "Subtitle HTTP \(http.statusCode)",
-                    recoverable: true
-                )
-            }
-            data = bytes
-        }
+        try await addSubtitle(
+            from: url,
+            id: id,
+            languageCode: languageCode,
+            label: label,
+            format: format,
+            offset: offset,
+            select: select,
+            headers: [:],
+            cookies: []
+        )
+    }
+
+    /// Load and parse a remote or local subtitle file, then optionally select it.
+    @discardableResult
+    public func addSubtitle(
+        from url: URL,
+        id: String = UUID().uuidString,
+        languageCode: String? = nil,
+        label: String? = nil,
+        format: SubtitleFormat? = nil,
+        offset: TimeInterval = 0,
+        select: Bool = true,
+        headers: [String: String] = [:],
+        cookies: [HTTPCookieValue] = []
+    ) async throws -> SubtitleTrack {
         let detected = format ?? SubtitleFormat.detect(from: url)
-        let parsed = try SubtitleParser.parse(data: data, format: detected)
+        let parsed = try await SubtitleResourceLoader.loadAndParse(
+            url: url,
+            format: detected,
+            headers: headers,
+            cookies: cookies
+        )
         let track = SubtitleTrack(
             id: id,
             languageCode: languageCode,
@@ -141,5 +159,58 @@ extension PlayerSession {
         } else {
             subtitleTracks.append(track)
         }
+    }
+}
+
+private enum SubtitleResourceLoader {
+    private static let maximumBytes = 10 * 1_024 * 1_024
+
+    @concurrent
+    static func loadAndParse(
+        url: URL,
+        format: SubtitleFormat?,
+        headers: [String: String],
+        cookies: [HTTPCookieValue]
+    ) async throws -> (format: SubtitleFormat, cues: [SubtitleCue]) {
+        let data: Data
+        if url.isFileURL {
+            let values = try url.resourceValues(forKeys: [.fileSizeKey])
+            if let size = values.fileSize, size > maximumBytes {
+                throw PlayerError.invalidSource("Subtitle file exceeds 10 MB")
+            }
+            data = try Data(contentsOf: url, options: [.mappedIfSafe])
+        } else {
+            var request = HTTPRequestBuilder.request(
+                url: url,
+                headers: headers,
+                cookies: cookies
+            )
+            request.timeoutInterval = 30
+            let (bytes, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse {
+                guard (200...299).contains(http.statusCode) else {
+                    throw PlayerError.itemFailed(
+                        domain: "HTTP",
+                        code: http.statusCode,
+                        message: "Subtitle HTTP \(http.statusCode)",
+                        recoverable: http.statusCode == 408
+                            || http.statusCode == 429
+                            || http.statusCode >= 500
+                    )
+                }
+                if let length = http.value(forHTTPHeaderField: "Content-Length"),
+                   let size = Int(length),
+                   size > maximumBytes
+                {
+                    throw PlayerError.invalidSource("Subtitle response exceeds 10 MB")
+                }
+            }
+            data = bytes
+        }
+        guard data.count <= maximumBytes else {
+            throw PlayerError.invalidSource("Subtitle data exceeds 10 MB")
+        }
+        try Task.checkCancellation()
+        return try SubtitleParser.parse(data: data, format: format)
     }
 }
