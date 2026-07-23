@@ -103,7 +103,9 @@ extension PlayerSession {
                 if apply(.bufferHealthy) != nil {
                     if let started {
                         let elapsed = started.duration(to: dependencies.clock.now())
+                        recordRebuffer(duration: elapsed)
                         emit(.rebufferEnded(duration: elapsed))
+                        emitMetricsSnapshot()
                     }
                     rebufferStartedAt = nil
                     stallTask?.cancel()
@@ -155,6 +157,8 @@ extension PlayerSession {
         case .accessLog(let indicated, let observed):
             indicatedBitrate = indicated
             observedBitrate = observed
+            metrics.lastIndicatedBitrate = indicated
+            metrics.lastObservedBitrate = observed
             emit(.bitrateChanged(indicatedBps: indicated, observedBps: observed))
 
         case .externalPlayback(let active):
@@ -199,14 +203,18 @@ extension PlayerSession {
         didEmitFirstFrame = true
         let start = loadStartedAt ?? dependencies.clock.now()
         let elapsed = start.duration(to: dependencies.clock.now())
+        metrics.ttff = elapsed
+        metrics.ttffMilliseconds = PlaybackMetrics.milliseconds(from: elapsed)
         emit(.firstFrame(elapsed: elapsed))
-        let ttffMs = Double(elapsed.components.seconds) * 1000
-            + Double(elapsed.components.attoseconds) / 1e15
+        emitMetricsSnapshot()
+    }
+
+    func emitMetricsSnapshot() {
         emit(.metrics(
-            ttffMs: ttffMs,
-            rebufferCount: nil,
-            indicatedBps: indicatedBitrate,
-            observedBps: observedBitrate
+            ttffMs: metrics.ttffMilliseconds,
+            rebufferCount: metrics.rebufferCount,
+            indicatedBps: metrics.lastIndicatedBitrate ?? indicatedBitrate,
+            observedBps: metrics.lastObservedBitrate ?? observedBitrate
         ))
     }
 

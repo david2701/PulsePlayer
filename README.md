@@ -16,7 +16,7 @@ Not an FFmpeg media center. Not a toy `VideoPlayer` wrapper.
 | --- | --- |
 | **Product focus** | iOS 17+, iPadOS 17+, tvOS 17+ |
 | **Swift** | 6.3+ · language mode 6 · strict concurrency |
-| **Version** | `0.9.0` (`PulsePlayerInfo.version`) |
+| **Version** | `1.0.0` (`PulsePlayerInfo.version`) |
 | **Install** | SPM only — no CocoaPods / Carthage |
 
 ---
@@ -52,7 +52,7 @@ https://github.com/david2701/PulsePlayer.git
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.9.0")
+    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "1.0.0")
 ]
 ```
 
@@ -105,11 +105,16 @@ Task {
     }
 }
 
-await session.load(MediaSource(
-    url: url,
-    headers: ["Authorization": "Bearer …"]
-))
+await session.load(
+    MediaSource(url: url, headers: ["Authorization": "Bearer …"]),
+    startAt: 30,                    // optional
+    resumeContinueWatching: false
+)
 session.play()
+
+let qoe = session.metricsSnapshot
+// qoe.ttffMilliseconds, qoe.rebufferCount, qoe.qualitySwitchCount
+// session.currentError?.suggestedAction → .retry / .checkNetwork / …
 ```
 
 ---
@@ -136,7 +141,8 @@ session.play()
 | **Live** | Seekable DVR window + seek to live edge |
 | **DRM** | FairPlay via `ContentKeyProviding` / `HTTPContentKeyProvider` |
 | **Ads** | `AdCue` markers + host `AdCueHandling` plugin |
-| **QoE** | Events: first frame, rebuffer, bitrate, buffer |
+| **QoE** | `metricsSnapshot` (TTFF, rebuffers, quality switches) + events |
+| **Errors** | Typed `PlayerError` + `suggestedAction` for host UX |
 
 ---
 
@@ -341,6 +347,7 @@ swift test
 CI (GitHub Actions on `main`): `swift test` · line-count · **iOS demo** · **tvOS demo**.
 
 - Integration: [Documentation/INTEGRATION.md](Documentation/INTEGRATION.md)
+- API stability (1.0): [Documentation/API_STABILITY.md](Documentation/API_STABILITY.md)
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - DocC catalog: `Sources/PulsePlayer/PulsePlayer.docc`
 

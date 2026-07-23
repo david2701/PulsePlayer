@@ -3,7 +3,7 @@
 ## Install
 
 ```swift
-.package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.9.0")
+.package(url: "https://github.com/david2701/PulsePlayer.git", from: "1.0.0")
 ```
 
 ## Minimal playback
@@ -89,7 +89,25 @@ await session.load(MediaSource(url: liveURL, isLive: true, dvrWindow: 3600))
 await session.seekToLiveEdge()
 ```
 
+## Metrics & errors
+
+```swift
+let m = session.metricsSnapshot
+// m.ttffMilliseconds, m.rebufferCount, m.qualitySwitchCount, m.errorCount
+
+if let err = session.currentError {
+    switch err.suggestedAction {
+    case .retry: Task { await session.retry() }
+    case .checkNetwork: break
+    case .reauthenticate: break // reload with new headers
+    case .changeSource, .recreateSession, .none: break
+    }
+}
+```
+
 ## Host entitlements
 
 - Background Modes → Audio (Now Playing / offline)
 - Picture in Picture capability (optional)
+
+Stability contract: [API_STABILITY.md](API_STABILITY.md)

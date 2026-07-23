@@ -6,7 +6,7 @@ Integrate PulsePlayer with Swift Package Manager and a long-lived session.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "0.9.0")
+    .package(url: "https://github.com/david2701/PulsePlayer.git", from: "1.0.0")
 ]
 ```
 
@@ -51,8 +51,12 @@ Task {
         // firstFrame, rebuffer, bitrateChanged, failed, …
     }
 }
-await session.load(MediaSource(url: url))
+await session.load(MediaSource(url: url), startAt: 30)
 session.play()
+
+// QoE
+let m = session.metricsSnapshot
+// m.ttffMilliseconds, m.rebufferCount, m.qualitySwitchCount
 ```
 
 ## Platforms
@@ -60,3 +64,4 @@ session.play()
 - iOS / iPadOS / tvOS **17+**
 - Swift **6.3+** (`swift-tools-version: 6.3`)
 - MIT — Copyright David Villegas
+- Stability: see `Documentation/API_STABILITY.md`

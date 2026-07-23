@@ -59,6 +59,18 @@ public final class PlayerSession: Identifiable {
     public internal(set) var qualityMasterURL: URL?
     /// Whether the engine is currently on a single locked media playlist.
     var qualityHardLocked = false
+    /// In-flight quality hard-lock task (coalesced).
+    var qualityTask: Task<Void, Never>?
+    /// Pending seek after load/item ready (continue watching / startAt).
+    var pendingStartAt: TimeInterval?
+    /// Suppress duplicate load lifecycle noise during quality-only reloads.
+    var isQualityReload = false
+
+    /// Rolling QoE counters (reset per primary `load`, not per quality switch).
+    public internal(set) var metrics: PlaybackMetrics = .empty
+
+    /// Snapshot of QoE counters (value copy).
+    public var metricsSnapshot: PlaybackMetrics { metrics }
 
     /// Optional queue for playlist autoplay-next.
     public weak var playbackQueue: PlaybackQueue?
@@ -164,8 +176,29 @@ public final class PlayerSession: Identifiable {
 
     func fail(with error: PlayerError) {
         currentError = error
+        metrics.errorCount += 1
+        metrics.lastError = error
         guard apply(.fail) != nil else { return }
         emit(.failed(error))
         scheduleAutoRetryIfNeeded()
+    }
+
+    func resetLoadCycleMetrics(sourceID: String?) {
+        metrics.loadCount += 1
+        metrics.ttff = nil
+        metrics.ttffMilliseconds = nil
+        metrics.rebufferCount = 0
+        metrics.totalRebuffer = .zero
+        metrics.totalRebufferMilliseconds = 0
+        metrics.qualitySwitchCount = 0
+        metrics.sourceID = sourceID
+        metrics.loadStartedAt = dependencies.clock.now()
+        // Keep errorCount / lastError across loads for session lifetime diagnostics.
+    }
+
+    func recordRebuffer(duration: Duration) {
+        metrics.rebufferCount += 1
+        metrics.totalRebuffer += duration
+        metrics.totalRebufferMilliseconds = PlaybackMetrics.milliseconds(from: metrics.totalRebuffer)
     }
 }

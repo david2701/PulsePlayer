@@ -48,6 +48,25 @@ public enum PlayerError: Error, Sendable, Equatable {
             return message
         }
     }
+
+    /// Host guidance for recovery UX.
+    public var suggestedAction: PlayerErrorAction {
+        switch self {
+        case .sessionInvalidated:
+            return .recreateSession
+        case .cancelled, .invalidSource:
+            return .changeSource
+        case .networkUnavailable:
+            return .checkNetwork
+        case .startupTimedOut, .stalledExhausted:
+            return .retry
+        case .assetLoadFailed(_, let recoverable),
+             .itemFailed(_, _, _, let recoverable),
+             .unknown(_, let recoverable):
+            if !recoverable { return .changeSource }
+            return .retry
+        }
+    }
 }
 
 extension PlayerError: LocalizedError {

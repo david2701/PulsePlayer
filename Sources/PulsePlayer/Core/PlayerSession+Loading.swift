@@ -2,12 +2,22 @@ import Foundation
 
 @MainActor
 extension PlayerSession {
-    public func load(_ source: MediaSource) async {
+    /// Load media. Optional `startAt` seeks after the item is ready.
+    /// When `resumeContinueWatching` is true and a saved position exists, it wins over `startAt`.
+    public func load(
+        _ source: MediaSource,
+        startAt: TimeInterval? = nil,
+        resumeContinueWatching: Bool = false
+    ) async {
         guard status != .invalidated else { return }
 
+        qualityTask?.cancel()
+        qualityTask = nil
         cancelLoadWork()
         loadGeneration &+= 1
         let gen = loadGeneration
+        isQualityReload = false
+        qualityHardLocked = false
 
         wantsPlaying = configuration.autoplay
         didEmitFirstFrame = false
@@ -16,6 +26,15 @@ extension PlayerSession {
         retryAttemptsUsed = 0
         frozenRetryPolicy = nil
         rebufferStartedAt = nil
+
+        if resumeContinueWatching, let saved = continueStore.position(for: source.id) {
+            pendingStartAt = saved
+        } else {
+            pendingStartAt = startAt
+        }
+
+        resetLoadCycleMetrics(sourceID: source.id)
+        metrics.loadStartedAt = loadStartedAt
 
         _ = apply(.load, isLive: source.isLive)
         currentSource = source
@@ -27,6 +46,9 @@ extension PlayerSession {
         observedBitrate = nil
         bufferProgressValue = nil
         wasAtLiveEdge = false
+        availableQualities = []
+        selectedQualityId = StreamQuality.auto.id
+        qualityMasterURL = nil
 
         startStartupWatchdog(generation: gen)
 
@@ -127,6 +149,15 @@ extension PlayerSession {
             emit(.duration(d))
         }
         playbackTime = engine.currentTime()
+
+        if let start = pendingStartAt, start > 0.25 {
+            pendingStartAt = nil
+            Task { @MainActor [weak self] in
+                await self?.seek(to: start)
+            }
+        } else {
+            pendingStartAt = nil
+        }
 
         let shouldPlay = wantsPlaying || configuration.autoplay
         if shouldPlay {

@@ -7,11 +7,24 @@ Versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
-### Planned (1.0)
+## [1.0.0] - 2026-07-23
 
-- Hardening pass
-- Real AVFoundation integration tests (device / simulator where stable)
-- Stable public API freeze notes
+### Added
+
+- **`PlaybackMetrics` / `metricsSnapshot`** — TTFF, rebuffer count/duration,
+  quality switches, bitrates, error count
+- **`PlayerError.suggestedAction`** — host recovery guidance
+  (`.retry`, `.checkNetwork`, `.reauthenticate`, …)
+- **`load(_:startAt:resumeContinueWatching:)`** — resume helpers
+- Real **AV integration tests** (Apple sample HLS; skip if offline)
+- Unit tests for metrics, error actions, concurrent quality lock
+- **`Documentation/API_STABILITY.md`** — 1.0 freeze surface
+
+### Changed
+
+- Quality hard-lock coalesces concurrent `setQuality` (latest wins)
+- Quality reload no longer emits a full `loadStarted` lifecycle spam
+- Version **1.0.0** — core integration API considered stable under SemVer
 
 ## [0.9.0] - 2026-07-22
 

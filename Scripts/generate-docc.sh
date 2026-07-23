@@ -22,7 +22,7 @@ swift package --allow-writing-to-directory "$OUT" generate-documentation \
     "Sources/PulsePlayer/PulsePlayer.docc" \
     --fallback-display-name PulsePlayer \
     --fallback-bundle-identifier com.pulseplayer.docs \
-    --fallback-bundle-version 0.9.0 \
+    --fallback-bundle-version 1.0.0 \
     --output-path "$OUT" \
     --transform-for-static-hosting \
     --hosting-base-path PulsePlayer
