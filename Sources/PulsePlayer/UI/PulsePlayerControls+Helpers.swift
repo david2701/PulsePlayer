@@ -30,6 +30,29 @@ extension PulsePlayerControls {
             .tint(accent)
             .frame(maxWidth: .infinity)
             .frame(height: 12)
+            .focusable()
+            .onMoveCommand { direction in
+                switch direction {
+                case .left:
+                    flashSeek(-skipInterval)
+                case .right:
+                    flashSeek(skipInterval)
+                default:
+                    break
+                }
+            }
+            .accessibilityLabel(PulsePlayerLocalization.string("Current time"))
+            .accessibilityValue(timeLabel(absolute))
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment:
+                    flashSeek(skipInterval)
+                case .decrement:
+                    flashSeek(-skipInterval)
+                @unknown default:
+                    break
+                }
+            }
         #else
         Slider(
             value: Binding(
@@ -60,6 +83,8 @@ extension PulsePlayerControls {
             }
         )
         .tint(accent)
+        .accessibilityLabel(PulsePlayerLocalization.string("Current time"))
+        .accessibilityValue(timeLabel(absolute))
         #endif
     }
 
@@ -82,7 +107,12 @@ extension PulsePlayerControls {
             .font(.system(size: 28, weight: .bold))
             .foregroundStyle(.white)
             .padding(22)
-            .background(.ultraThinMaterial.opacity(0.55), in: Circle())
+            .background(
+                reduceTransparency
+                    ? AnyShapeStyle(Color.black.opacity(0.9))
+                    : AnyShapeStyle(.ultraThinMaterial.opacity(0.55)),
+                in: Circle()
+            )
             .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1))
             .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
     }
@@ -92,7 +122,12 @@ extension PulsePlayerControls {
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.currentSource?.title ?? "")
                     .font(.headline)
-                Text("Tap play · double-tap ±\(Int(skipInterval))s")
+                Text(
+                    PulsePlayerLocalization.format(
+                        "Tap to play or pause · double-tap to skip %d seconds",
+                        Int(skipInterval)
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.75))
             }
@@ -101,7 +136,7 @@ extension PulsePlayerControls {
     }
 
     var livePill: some View {
-        Text("LIVE")
+        Text(PulsePlayerLocalization.string("Live").uppercased())
             .font(.caption2.weight(.bold))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -109,7 +144,7 @@ extension PulsePlayerControls {
     }
 
     var statusPill: some View {
-        Text(session.status.rawValue.uppercased())
+        Text(localizedStatus.uppercased())
             .font(.system(size: 9, weight: .bold, design: .rounded))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -130,17 +165,23 @@ extension PulsePlayerControls {
         }
     }
 
+    @ViewBuilder
     var bottomChromeBackground: some View {
-        LinearGradient(
-            colors: [
-                .clear,
-                .black.opacity(theme.bottomScrimOpacity * 0.62),
-                .black.opacity(theme.bottomScrimOpacity),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea(edges: .bottom)
+        if reduceTransparency {
+            Color.black.opacity(increasedContrast ? 0.98 : 0.9)
+                .ignoresSafeArea(edges: .bottom)
+        } else {
+            LinearGradient(
+                colors: [
+                    .clear,
+                    .black.opacity(theme.bottomScrimOpacity * 0.62),
+                    .black.opacity(theme.bottomScrimOpacity),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .bottom)
+        }
     }
 
     var seekFlashOverlay: some View {
@@ -150,12 +191,22 @@ extension PulsePlayerControls {
                     .font(.title2.weight(.bold).monospacedDigit())
                     .padding(.horizontal, 18)
                     .padding(.vertical, 12)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .background(
+                        reduceTransparency
+                            ? AnyShapeStyle(Color.black.opacity(0.92))
+                            : AnyShapeStyle(.ultraThinMaterial),
+                        in: Capsule()
+                    )
                     .overlay(Capsule().stroke(Color.white.opacity(0.25)))
-                    .transition(.scale.combined(with: .opacity))
+                    .transition(reduceMotion
+                        ? .opacity
+                        : .scale.combined(with: .opacity))
             }
         }
-        .animation(.spring(response: 0.28, dampingFraction: 0.8), value: seekFlash)
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.8),
+            value: seekFlash
+        )
         .allowsHitTesting(false)
     }
 
@@ -179,30 +230,57 @@ extension PulsePlayerControls {
                 .font(.caption.monospacedDigit().weight(.semibold))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(.ultraThinMaterial.opacity(0.9), in: Capsule())
+                .background(
+                    reduceTransparency
+                        ? AnyShapeStyle(Color.black.opacity(0.92))
+                        : AnyShapeStyle(.ultraThinMaterial.opacity(0.9)),
+                    in: Capsule()
+                )
         }
         #endif
     }
 
-    func controlButton(_ system: String, size: CGFloat, action: @escaping () -> Void) -> some View {
+    func controlButton(
+        _ system: String,
+        size: CGFloat,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Image(systemName: system)
                 .font(.system(size: size, weight: .semibold))
-                .frame(width: theme.controlIconSize, height: theme.controlIconSize)
+                .frame(
+                    width: max(44, theme.controlIconSize),
+                    height: max(44, theme.controlIconSize)
+                )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PulsePlayerIconButtonStyle())
+        .accessibilityLabel(label)
+        .accessibilityInputLabels([label])
     }
 
-    func glassIconButton(_ system: String, action: @escaping () -> Void) -> some View {
+    func glassIconButton(
+        _ system: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Image(systemName: system)
                 .font(.body.weight(.semibold))
                 .padding(12)
-                .background(.ultraThinMaterial.opacity(0.7), in: Circle())
+                .frame(minWidth: 44, minHeight: 44)
+                .background(
+                    reduceTransparency
+                        ? AnyShapeStyle(Color.black.opacity(0.9))
+                        : AnyShapeStyle(.ultraThinMaterial.opacity(0.7)),
+                    in: Circle()
+                )
                 .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PulsePlayerIconButtonStyle())
+        .accessibilityLabel(label)
+        .accessibilityInputLabels([label])
     }
 
     var displayTime: TimeInterval { isScrubbing ? scrubTime : session.playbackTime }
@@ -213,13 +291,55 @@ extension PulsePlayerControls {
         return "speaker.wave.2.fill"
     }
 
+    var playPauseLabel: String {
+        session.isPlaying
+            ? PulsePlayerLocalization.string("Pause")
+            : PulsePlayerLocalization.string("Play")
+    }
+
+    var muteLabel: String {
+        session.isMuted
+            ? PulsePlayerLocalization.string("Unmute")
+            : PulsePlayerLocalization.string("Mute")
+    }
+
+    func skipLabel(backward: Bool) -> String {
+        if backward {
+            return PulsePlayerLocalization.format(
+                "Skip backward %d seconds",
+                Int(skipInterval)
+            )
+        }
+        return PulsePlayerLocalization.format(
+            "Skip forward %d seconds",
+            Int(skipInterval)
+        )
+    }
+
+    var localizedStatus: String {
+        switch session.status {
+        case .idle: PulsePlayerLocalization.string("Idle")
+        case .loading: PulsePlayerLocalization.string("Loading")
+        case .ready: PulsePlayerLocalization.string("Ready")
+        case .playing: PulsePlayerLocalization.string("Playing")
+        case .buffering: PulsePlayerLocalization.string("Buffering")
+        case .stalled: PulsePlayerLocalization.string("Stalled")
+        case .ended: PulsePlayerLocalization.string("Ended")
+        case .failed: PulsePlayerLocalization.string("Failed")
+        case .invalidated: PulsePlayerLocalization.string("Closed")
+        }
+    }
+
     func flashSeek(_ delta: TimeInterval) {
         Task { await session.seek(relative: delta) }
         seekFlash = delta >= 0 ? "+\(Int(delta))s" : "\(Int(delta))s"
         bumpChrome()
-        Task {
+        seekFlashTask?.cancel()
+        seekFlashTask = Task {
             try? await Task.sleep(for: .milliseconds(700))
-            if seekFlash != nil { seekFlash = nil }
+            guard !Task.isCancelled else { return }
+            seekFlash = nil
+            seekFlashTask = nil
         }
     }
 
@@ -250,7 +370,31 @@ extension PulsePlayerControls {
         let h = total / 3600
         let m = (total % 3600) / 60
         let s = total % 60
-        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
-        return String(format: "%d:%02d", m, s)
+        if h > 0 {
+            return String(
+                format: "%d:%02d:%02d",
+                locale: Locale.current,
+                h,
+                m,
+                s
+            )
+        }
+        return String(format: "%d:%02d", locale: Locale.current, m, s)
+    }
+}
+
+private struct PulsePlayerIconButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.65 : 1)
+            .scaleEffect(
+                configuration.isPressed && !reduceMotion ? 0.94 : 1
+            )
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.12),
+                value: configuration.isPressed
+            )
     }
 }

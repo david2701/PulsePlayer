@@ -40,6 +40,12 @@ public struct PulsePlayerTVControls: View {
                     .font(.title2)
                     .frame(minWidth: 72, minHeight: 48)
             }
+            .accessibilityLabel(
+                PulsePlayerLocalization.format(
+                    "Skip backward %d seconds",
+                    Int(skipInterval)
+                )
+            )
 
             Button {
                 PulsePlayerTVCommands.handlePlayPause(session: session)
@@ -48,6 +54,11 @@ public struct PulsePlayerTVControls: View {
                     .font(.largeTitle)
                     .frame(minWidth: 96, minHeight: 64)
             }
+            .accessibilityLabel(
+                session.isPlaying
+                    ? PulsePlayerLocalization.string("Pause")
+                    : PulsePlayerLocalization.string("Play")
+            )
 
             Button {
                 PulsePlayerTVCommands.skipForward(session: session, interval: skipInterval)
@@ -56,10 +67,18 @@ public struct PulsePlayerTVControls: View {
                     .font(.title2)
                     .frame(minWidth: 72, minHeight: 48)
             }
+            .accessibilityLabel(
+                PulsePlayerLocalization.format(
+                    "Skip forward %d seconds",
+                    Int(skipInterval)
+                )
+            )
         }
         .buttonStyle(.card)
         .padding()
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(PulsePlayerLocalization.string("Player controls"))
+        .focusSection()
     }
 }
 #endif

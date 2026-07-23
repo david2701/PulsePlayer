@@ -6,15 +6,44 @@ public struct PulseFullscreenContainer: View {
     @Binding var isPresented: Bool
     let session: PlayerSession
     var chrome: PlayerChromeMode
+    var videoGravity: PlayerVideoGravity
+    var showsSubtitles: Bool
+    var theme: PlayerChromeTheme
+    var enableGestures: Bool
 
+    public init(
+        isPresented: Binding<Bool>,
+        session: PlayerSession,
+        chrome: PlayerChromeMode = .full,
+        videoGravity: PlayerVideoGravity = .resizeAspect,
+        showsSubtitles: Bool = true,
+        theme: PlayerChromeTheme = .default,
+        enableGestures: Bool = true
+    ) {
+        self._isPresented = isPresented
+        self.session = session
+        self.chrome = chrome
+        self.videoGravity = videoGravity
+        self.showsSubtitles = showsSubtitles
+        self.theme = theme
+        self.enableGestures = enableGestures
+    }
+
+    /// Source-compatible 1.0 fullscreen initializer.
     public init(
         isPresented: Binding<Bool>,
         session: PlayerSession,
         chrome: PlayerChromeMode = .full
     ) {
-        self._isPresented = isPresented
-        self.session = session
-        self.chrome = chrome
+        self.init(
+            isPresented: isPresented,
+            session: session,
+            chrome: chrome,
+            videoGravity: .resizeAspect,
+            showsSubtitles: true,
+            theme: .default,
+            enableGestures: true
+        )
     }
 
     public var body: some View {
@@ -22,10 +51,12 @@ public struct PulseFullscreenContainer: View {
             Color.black.ignoresSafeArea()
             PulsePlayerView(
                 session: session,
-                videoGravity: .resizeAspect,
-                showsSubtitles: true,
+                videoGravity: videoGravity,
+                showsSubtitles: showsSubtitles,
                 chrome: chrome,
-                enableGestures: true
+                theme: theme,
+                enableGestures: enableGestures,
+                allowsFullscreen: false
             )
             .ignoresSafeArea()
 
@@ -39,6 +70,10 @@ public struct PulseFullscreenContainer: View {
                     .padding(16)
             }
             .padding(.top, 8)
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel(
+                PulsePlayerLocalization.string("Close full screen")
+            )
         }
         #if !os(tvOS)
         .statusBarHidden(true)
@@ -47,27 +82,65 @@ public struct PulseFullscreenContainer: View {
 }
 
 public extension View {
+    /// Source-compatible 1.0 fullscreen modifier.
     func pulseFullscreen(
         isPresented: Binding<Bool>,
         session: PlayerSession,
         chrome: PlayerChromeMode = .full
     ) -> some View {
+        pulseFullscreen(
+            isPresented: isPresented,
+            session: session,
+            chrome: chrome,
+            videoGravity: .resizeAspect,
+            showsSubtitles: true,
+            theme: .default,
+            enableGestures: true
+        )
+    }
+
+    func pulseFullscreen(
+        isPresented: Binding<Bool>,
+        session: PlayerSession,
+        chrome: PlayerChromeMode = .full,
+        videoGravity: PlayerVideoGravity = .resizeAspect,
+        showsSubtitles: Bool = true,
+        theme: PlayerChromeTheme = .default,
+        enableGestures: Bool = true
+    ) -> some View {
         fullScreenCover(isPresented: isPresented) {
             PulseFullscreenContainer(
                 isPresented: isPresented,
                 session: session,
-                chrome: chrome
+                chrome: chrome,
+                videoGravity: videoGravity,
+                showsSubtitles: showsSubtitles,
+                theme: theme,
+                enableGestures: enableGestures
             )
         }
     }
 }
 #else
 public extension View {
-    /// No-op fullscreen on platforms without `fullScreenCover`.
+    /// Source-compatible 1.0 fullscreen modifier.
     func pulseFullscreen(
         isPresented: Binding<Bool>,
         session: PlayerSession,
         chrome: PlayerChromeMode = .full
+    ) -> some View {
+        self
+    }
+
+    /// No-op fullscreen on platforms without `fullScreenCover`.
+    func pulseFullscreen(
+        isPresented: Binding<Bool>,
+        session: PlayerSession,
+        chrome: PlayerChromeMode = .full,
+        videoGravity: PlayerVideoGravity = .resizeAspect,
+        showsSubtitles: Bool = true,
+        theme: PlayerChromeTheme = .default,
+        enableGestures: Bool = true
     ) -> some View {
         self
     }

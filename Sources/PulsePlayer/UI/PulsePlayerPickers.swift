@@ -7,7 +7,7 @@ struct TrackPickerSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Audio") {
+                Section(PulsePlayerLocalization.string("Audio")) {
                     ForEach(session.availableAudioTracks) { track in
                         Button {
                             session.selectAudioTrack(id: track.id)
@@ -18,18 +18,27 @@ struct TrackPickerSheet: View {
                                 Spacer()
                                 if track.isSelected {
                                     Image(systemName: "checkmark")
+                                        .accessibilityHidden(true)
                                 }
                             }
                         }
+                        .accessibilityAddTraits(
+                            track.isSelected ? .isSelected : []
+                        )
                     }
                 }
-                Section("Text / Subtitles") {
+                Section(PulsePlayerLocalization.string("Text / Subtitles")) {
                     Button {
                         session.selectTextTrack(id: nil)
                         dismiss()
                     } label: {
-                        Text("Off")
+                        Text(PulsePlayerLocalization.string("Off"))
                     }
+                    .accessibilityAddTraits(
+                        session.availableTextTracks.allSatisfy { !$0.isSelected }
+                            ? .isSelected
+                            : []
+                    )
                     ForEach(session.availableTextTracks) { track in
                         Button {
                             session.selectTextTrack(id: track.id)
@@ -38,21 +47,27 @@ struct TrackPickerSheet: View {
                             HStack {
                                 Text(track.displayName)
                                 if track.isExternal {
-                                    Text("EXT").font(.caption2).opacity(0.5)
+                                    Text(PulsePlayerLocalization.string("External"))
+                                        .font(.caption2)
+                                        .opacity(0.6)
                                 }
                                 Spacer()
                                 if track.isSelected {
                                     Image(systemName: "checkmark")
+                                        .accessibilityHidden(true)
                                 }
                             }
                         }
+                        .accessibilityAddTraits(
+                            track.isSelected ? .isSelected : []
+                        )
                     }
                 }
             }
-            .navigationTitle("Tracks")
+            .navigationTitle(PulsePlayerLocalization.string("Tracks"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button(PulsePlayerLocalization.string("Done")) { dismiss() }
                 }
             }
         }
@@ -73,13 +88,19 @@ struct QualityPickerSheet: View {
                     }
                 } label: {
                     HStack {
-                        Text("Auto")
+                        Text(PulsePlayerLocalization.string("Auto"))
                         Spacer()
                         if session.selectedQualityId == StreamQuality.auto.id {
                             Image(systemName: "checkmark")
+                                .accessibilityHidden(true)
                         }
                     }
                 }
+                .accessibilityAddTraits(
+                    session.selectedQualityId == StreamQuality.auto.id
+                        ? .isSelected
+                        : []
+                )
                 ForEach(session.availableQualities) { q in
                     Button {
                         Task {
@@ -90,7 +111,12 @@ struct QualityPickerSheet: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(q.label)
-                                Text(q.supportsHardLock ? "Hard lock" : "Soft cap")
+                                Text(
+                                    session.configuration.preferHardQualityLock
+                                        && q.supportsHardLock
+                                        ? PulsePlayerLocalization.string("Hard lock")
+                                        : PulsePlayerLocalization.string("Soft cap")
+                                )
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -100,15 +126,23 @@ struct QualityPickerSheet: View {
                             Spacer()
                             if session.selectedQualityId == q.id {
                                 Image(systemName: "checkmark")
+                                    .accessibilityHidden(true)
                             }
                         }
                     }
+                    .accessibilityAddTraits(
+                        session.selectedQualityId == q.id ? .isSelected : []
+                    )
                 }
             }
-            .navigationTitle(session.isQualityHardLocked ? "Quality (locked)" : "Quality")
+            .navigationTitle(
+                session.isQualityHardLocked
+                    ? PulsePlayerLocalization.string("Quality (locked)")
+                    : PulsePlayerLocalization.string("Quality")
+            )
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button(PulsePlayerLocalization.string("Done")) { dismiss() }
                 }
             }
         }

@@ -3,6 +3,10 @@ import SwiftUI
 /// Subtitle renderer driven by `session.currentSubtitleText` + `session.subtitleStyle`.
 public struct PulseSubtitleOverlay: View {
     private let session: PlayerSession
+    @ScaledMetric(relativeTo: .body) private var fontScale: CGFloat = 1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
 
     public init(session: PlayerSession) {
         self.session = session
@@ -18,7 +22,7 @@ public struct PulseSubtitleOverlay: View {
                 positioned {
                     Text(text)
                         .font(.system(
-                            size: style.fontSize,
+                            size: style.fontSize * fontScale,
                             weight: style.fontWeightBold ? .semibold : .regular
                         ))
                         .foregroundStyle(textColor(style))
@@ -33,9 +37,15 @@ public struct PulseSubtitleOverlay: View {
                         .padding(.horizontal, 20)
                 }
                 .transition(.opacity)
+                .accessibilityElement()
+                .accessibilityLabel(text)
+                .accessibilityAddTraits(.updatesFrequently)
             }
         }
-        .animation(.easeOut(duration: 0.12), value: session.currentSubtitleText)
+        .animation(
+            reduceMotion ? nil : .easeOut(duration: 0.12),
+            value: session.currentSubtitleText
+        )
         .allowsHitTesting(false)
     }
 
@@ -63,7 +73,7 @@ public struct PulseSubtitleOverlay: View {
     }
 
     private func textColor(_ style: SubtitleStyle) -> Color {
-        Color(
+        return Color(
             red: style.textRed,
             green: style.textGreen,
             blue: style.textBlue,
@@ -72,11 +82,19 @@ public struct PulseSubtitleOverlay: View {
     }
 
     private func backgroundColor(_ style: SubtitleStyle) -> Color {
-        Color(
+        let opacity: Double
+        if reduceTransparency {
+            opacity = max(0.92, style.backgroundOpacity)
+        } else if contrast == .increased {
+            opacity = max(0.78, style.backgroundOpacity)
+        } else {
+            opacity = style.backgroundOpacity
+        }
+        return Color(
             red: style.backgroundRed,
             green: style.backgroundGreen,
             blue: style.backgroundBlue,
-            opacity: style.backgroundOpacity
+            opacity: opacity
         )
     }
 }

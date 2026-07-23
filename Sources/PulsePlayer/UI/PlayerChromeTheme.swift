@@ -25,7 +25,7 @@ public struct PlayerChromeTheme: Equatable {
         scrubPreviewHeight: CGFloat = 94,
         showsBitrateChip: Bool = true,
         autoHideDelay: TimeInterval = 3.2,
-        controlIconSize: CGFloat = 34,
+        controlIconSize: CGFloat = 44,
         chipOpacity: Double = 0.12
     ) {
         self.accent = accent
@@ -36,7 +36,7 @@ public struct PlayerChromeTheme: Equatable {
         self.scrubPreviewHeight = scrubPreviewHeight
         self.showsBitrateChip = showsBitrateChip
         self.autoHideDelay = autoHideDelay
-        self.controlIconSize = controlIconSize
+        self.controlIconSize = max(44, controlIconSize)
         self.chipOpacity = chipOpacity
     }
 

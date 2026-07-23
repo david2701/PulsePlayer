@@ -17,9 +17,9 @@ open class PulsePlayerViewController: UIViewController {
         super.init(nibName: nil, bundle: nil)
     }
 
-    @available(*, unavailable)
+    @available(*, unavailable, message: "Use init(session:)")
     public required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+        return nil
     }
 
     open override func viewDidLoad() {
@@ -35,11 +35,18 @@ open class PulsePlayerViewController: UIViewController {
         playerLayer.frame = view.bounds
     }
 
+    open override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        session.attachPlayerLayer(playerLayer)
+    }
+
     open override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         if isMovingFromParent || isBeingDismissed {
             // Keep session alive; only detach layer.
-            session.attachPlayerLayer(nil)
+            if playerLayer.player != nil {
+                session.attachPlayerLayer(nil)
+            }
             playerLayer.player = nil
         }
     }
