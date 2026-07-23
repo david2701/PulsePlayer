@@ -8,7 +8,8 @@
 
 **Production AVPlayer toolkit** for Apple platforms — one Swift Package, MIT licensed.
 
-Long-lived session · typed state machine · real transport chrome · offline · FairPlay hooks · feed pool.
+Long-lived session · typed state machine · renewable auth · native HLS interstitials ·
+low-latency live · persistable FairPlay · editorial timeline · production telemetry.
 
 Not an FFmpeg media center. Not a toy `VideoPlayer` wrapper.
 
@@ -124,25 +125,26 @@ let qoe = session.metricsSnapshot
 | Area | What you get |
 | --- | --- |
 | **Playback** | HLS + progressive MP4 via `AVPlayer` |
-| **Lifecycle** | Long-lived `PlayerSession` (`@MainActor`, `@Observable`) |
+| **Lifecycle** | Long-lived `PlayerSession` + audio interruption, route, foreground/background and memory-pressure handling |
 | **State** | Public state machine + recoverable `PlayerError` |
 | **Chrome** | `.none` · `.minimal` · `.lite` · `.full` |
-| **Transport** | Scrubber with fixed current / duration labels, ±10s, mute, volume menu |
+| **Transport** | Compact/cinematic adaptive chrome, scrubber, ±10s, playback speed, mute and volume |
 | **Gestures** | Double-tap left −10s / right +10s |
 | **Tracks** | Audio + text (HLS embedded and external SRT/VTT) |
-| **Quality** | HLS ladder · **hard lock** (variant playlist) · soft peak bitrate fallback |
+| **Quality** | HLS ladder · soft ABR cap by default · optional variant-playlist hard lock |
 | **Theming** | `PlayerChromeTheme` (accent, scrims, scrub preview, auto-hide) |
 | **Scrub preview** | Thumbnail while scrubbing (when asset supports image generation) |
 | **Subtitles** | External SRT/VTT, offset, style, overlay |
 | **System** | PiP, Now Playing, audio session, AirPlay picker |
 | **Feeds** | `PlayerPool` acquire / prewarm / rebalance |
-| **Offline** | Download, resume/retry, storage limit (**iOS**; catalog APIs elsewhere) |
+| **Offline** | Download, background restore, resume/retry, storage limit and persistable FairPlay keys (**iOS**) |
 | **Playlist** | `PlaybackQueue` + continue watching |
-| **Live** | Seekable DVR window + seek to live edge |
-| **DRM** | FairPlay via `ContentKeyProviding` / `HTTPContentKeyProvider` |
-| **Ads** | `AdCue` markers + host `AdCueHandling` plugin |
-| **QoE** | `metricsSnapshot` (TTFF, rebuffers, quality switches) + events |
-| **Errors** | Typed `PlayerError` + `suggestedAction` for host UX |
+| **Live** | DVR + native live offset + measured LL-HLS catch-up policy |
+| **DRM** | Online and persistable/offline FairPlay keys with renewal/reuse hooks |
+| **Interstitials** | Server-side HLS interstitial monitoring + client native AVFoundation schedules and skip state |
+| **Editorial** | Chapters, skip intro/recap/credits and Up Next with tvOS-first focus |
+| **QoE** | Correlated telemetry, AV access/error diagnostics, TTFF/rebuffer/quality/auth/fallback metrics and budgets |
+| **Recovery** | Renewable credentials, 401/403 reauthentication, retry and ordered alternate origins |
 
 ---
 
@@ -150,7 +152,7 @@ let qoe = session.metricsSnapshot
 
 | Mode | Best for | UI |
 | --- | --- | --- |
-| `.full` | Detail / offline / long-form | Scrubber + times + transport + overflow menu (tracks, quality, volume) |
+| `.full` | Detail / offline / long-form | Adaptive compact/center transport + timeline + overflow menu |
 | `.lite` | Inline cards | Scrubber + times + play + mute |
 | `.minimal` | Vertical feed | Tap play/pause · double-tap seek · mute |
 | `.none` | Custom UI | Video surface only |
@@ -160,12 +162,17 @@ PulsePlayerView(session: session, chrome: .full)
 PulsePlayerView(session: session, chrome: .minimal)
 ```
 
-Scrubber layout (full / lite) — times use fixed monospaced widths so labels do not jump:
+Scrubber layout (full / lite) — times use adaptive monospaced widths so labels stay stable without clipping:
 
 ```text
 0:06  ————●————————  10:00
 [▶] [−10] [+10]          [⋯] [AirPlay] [mute] [⛶]
 ```
+
+On wide/full-screen surfaces, the primary controls move to a cinematic center
+cluster while title, quality/live state and contextual playback metadata remain
+separate from the timeline. tvOS uses this same chrome with focus-native
+targets instead of a demo-specific implementation.
 
 ---
 
@@ -196,12 +203,66 @@ Files stay under **400 lines**; CI enforces it.
 
 | Behavior | Contract |
 | --- | --- |
-| Headers | Applied on the **initial** `AVURLAsset` request only |
-| HLS segments | Often **do not** inherit those headers (AVFoundation) |
-| Cookies | `HTTPCookieValue` → `Cookie` header on the initial request |
-| Token refresh | Host: call `load` again with new headers |
+| Headers | Applied to `AVURLAsset` and PulsePlayer-owned HLS/subtitle/offline requests |
+| HLS segments | Propagation remains controlled by AVFoundation and the origin server |
+| Cookies | Filtered by domain, path, expiry, and secure transport before each owned request |
+| Token refresh | `PlaybackCredentialProviding` refreshes before expiry and on 401/403 while preserving position, tracks and playback intent |
 
 Secrets are redacted in logs and warning events.
+
+### Production resilience & telemetry
+
+```swift
+actor TokenProvider: PlaybackCredentialProviding {
+    func credentials(
+        for source: MediaSource,
+        reason: PlaybackCredentialRefreshReason
+    ) async throws -> PlaybackCredentials {
+        let token = try await authClient.token(for: source.id)
+        return PlaybackCredentials(
+            headers: ["Authorization": "Bearer \(token.value)"],
+            refreshAfter: .seconds(token.secondsUntilRefresh)
+        )
+    }
+}
+
+actor TelemetrySink: PlaybackTelemetrySink {
+    func record(_ record: PlaybackTelemetryRecord) async {
+        await analytics.send(record)
+    }
+
+    func recordProduction(_ record: ProductionPlaybackTelemetryRecord) async {
+        await analytics.send(record)
+    }
+}
+
+var config = PlayerConfiguration.default
+config.performanceBudget = PlaybackPerformanceBudget(
+    maximumTTFFMilliseconds: 2_000,
+    maximumRebufferCount: 2,
+    maximumTotalRebufferMilliseconds: 5_000
+)
+config.pausesWhenBackgrounded = true
+config.resumesPlaybackAfterForeground = false
+
+let dependencies = PlayerDependencies(
+    telemetry: TelemetrySink(),
+    applicationLifecycle: SystemApplicationLifecycle.shared
+)
+let session = PlayerSession(configuration: config, dependencies: dependencies)
+session.credentialProvider = TokenProvider()
+
+await session.load(MediaSource(
+    id: "episode-1",
+    url: primaryOrigin,
+    fallbackURLs: [secondaryOrigin]
+))
+```
+
+Use `makeEventStream()` for the stable 1.0 event contract and
+`makeProductionEventStream()` for credential, lifecycle, diagnostics,
+interstitial, editorial, live-latency and performance-budget events. Every
+telemetry record includes session, playback and source correlation identifiers.
 
 ### Picture in Picture & background
 
@@ -214,9 +275,16 @@ config.prefersBackgroundAudio = true
 let session = PlayerSession(configuration: config)
 // After PulsePlayerView attaches the layer:
 session.startPictureInPicture()
+
+session.pictureInPictureRestoreHandler = {
+    // Restore/present the host playback screen, then report the real result.
+    true
+}
 ```
 
 Host app: **Background Modes → Audio** (and PiP capability if needed).
+Set `managesAudioSession = false` if the host already owns the shared
+`AVAudioSession`.
 
 ### Vertical feed
 
@@ -238,7 +306,13 @@ Use `PulsePlayerView(session: session, chrome: .minimal)` in cells.
 
 ```swift
 try session.addSubtitle(content: srt, id: "en", languageCode: "en", format: .srt)
-try await session.addSubtitle(from: vttURL, languageCode: "es", label: "Español")
+try await session.addSubtitle(
+    from: vttURL,
+    languageCode: "es",
+    label: "Español",
+    headers: ["Authorization": "Bearer …"],
+    cookies: cookies
+)
 
 session.setSubtitleOffset(0.3)
 session.applySubtitleStyle(.large)
@@ -264,16 +338,52 @@ try OfflineDownloadManager.shared.enforceStorageLimit()
 ```
 
 Offline **downloads** require iOS (`AVAssetDownloadURLSession`). tvOS/macOS compile the catalog APIs but `enqueue` throws.
+Forward background session completion from the app delegate:
+
+```swift
+func application(
+    _ application: UIApplication,
+    handleEventsForBackgroundURLSession identifier: String,
+    completionHandler: @escaping () -> Void
+) {
+    OfflineDownloadManager.shared.handleBackgroundEvents(
+        completionHandler: completionHandler
+    )
+}
+```
+
+Protected downloads use an app-owned FPS provider plus the encrypted,
+file-protected persistable key store:
+
+```swift
+let keyStore = try PersistableContentKeyFileStore()
+let provider = HTTPContentKeyProvider(
+    configuration: .init(certificateURL: certURL, licenseURL: licenseURL)
+)
+
+session.contentKeyProvider = provider
+session.persistableContentKeyStore = keyStore
+OfflineDownloadManager.shared.contentKeyProvider = provider
+OfflineDownloadManager.shared.persistableContentKeyStore = keyStore
+
+try OfflineDownloadManager.shared.enqueue(
+    sourceURL: encryptedHLS,
+    id: "protected-episode",
+    title: "Protected episode",
+    contentKeyAssetId: "asset-42"
+)
+```
 
 ### Quality, tracks, playlist, live, FairPlay
 
 ```swift
-// Quality — hard lock reloads the media playlist when playlistURL is known
+// Quality — soft ABR cap by default
 await session.setQualityAuto()
 if let q = session.availableQualities.first {
-    await session.setQuality(q)   // isQualityHardLocked == true when locked
+    await session.setQuality(q)
 }
-// Soft-only: PlayerConfiguration(preferHardQualityLock: false)
+// Opt in only when dropping alternate master-playlist groups is acceptable:
+// PlayerConfiguration(preferHardQualityLock: true)
 
 // Tracks
 session.selectAudioTrack(id: audioId)
@@ -285,7 +395,11 @@ queue.session = session
 session.playbackQueue = queue
 await queue.play(at: 0)
 
-// Live
+// LL-HLS: AVPlayer handles EXT-X-PART; PulsePlayer configures native offset,
+// preserves it after stalls and uses bounded catch-up when latency drifts.
+var liveConfig = PlayerConfiguration.default
+liveConfig.liveLatencyPolicy = .lowLatency
+session.updateConfiguration { $0.liveLatencyPolicy = .lowLatency }
 await session.load(MediaSource(url: liveURL, isLive: true, dvrWindow: 3600))
 await session.seekToLiveEdge()
 
@@ -304,6 +418,37 @@ session.adCueHandler = self
 await session.load(MediaSource(url: vod, adCues: [AdCue(start: 30, duration: 15)]))
 ```
 
+### Native interstitials and editorial timeline
+
+```swift
+let source = MediaSource(
+    id: "episode-1",
+    url: vod,
+    interstitials: [
+        InterstitialDescriptor(
+            id: "midroll-1",
+            time: 600,
+            assetURLs: [adHLS],
+            skipAfter: 5
+        ),
+    ],
+    editorialMarkers: [
+        EditorialMarker(kind: .intro, title: "Intro", start: 0, end: 75),
+        EditorialMarker(kind: .chapter, title: "Chapter 1", start: 75, end: 600),
+        EditorialMarker(kind: .credits, title: "Credits", start: 2_700, end: 2_760),
+    ]
+)
+session.nextContentProposal = NextContentProposal(
+    id: "episode-2",
+    sourceURL: nextEpisodeURL,
+    title: "Episode 2",
+    subtitle: "Next episode",
+    previewImageURL: artworkURL,
+    automaticAcceptanceInterval: 10
+)
+await session.load(source)
+```
+
 > **FairPlay:** there is no free public test stream. You need Apple’s [FairPlay Streaming](https://developer.apple.com/streaming/fps/) materials (certificate + test content + key server).
 
 ---
@@ -320,7 +465,7 @@ open PulsePlayerDemo.xcodeproj
 
 Details: [Examples/PulsePlayerDemo/README.md](Examples/PulsePlayerDemo/README.md)
 
-### tvOS — catalog + remote (0.9)
+### tvOS — catalog + remote
 
 ```bash
 cd Examples/PulsePlayerTVDemo
@@ -329,7 +474,7 @@ open PulsePlayerTVDemo.xcodeproj
 # Destination: Apple TV Simulator
 ```
 
-Focusable catalog, `onPlayPauseCommand`, quality hard lock, cinema chrome.  
+Focusable catalog, `onPlayPauseCommand`, quality selection, cinema chrome.
 Details: [Examples/PulsePlayerTVDemo/README.md](Examples/PulsePlayerTVDemo/README.md)
 
 Use Apple’s HLS samples (third-party progressive MP4s often fail on simulator).
@@ -340,15 +485,25 @@ Use Apple’s HLS samples (third-party progressive MP4s often fail on simulator)
 
 ```bash
 swift test
+./Scripts/check-coverage.sh 70 # tests + portable-core coverage gate
 ./Scripts/check-line-count.sh   # fails if any .swift file > 400 lines
-./Scripts/generate-docc.sh ./docs   # DocC HTML (Xcode / docc)
+./Scripts/generate-docc.sh ./docs   # symbol-linked DocC HTML
+swift package diagnose-api-breaking-changes v1.0.0
+PULSEPLAYER_RUN_NETWORK_TESTS=1 swift test --filter AVIntegrationTests
 ```
 
-CI (GitHub Actions on `main`): `swift test` · line-count · **iOS demo** · **tvOS demo**.
+CI (GitHub Actions on `main`): tests + coverage · Thread Sanitizer · DocC
+warnings-as-errors · line-count · **iOS demo** · **tvOS demo**. Real Apple-HLS
+integration runs are explicit and scheduled, never silent passes.
 
 - Integration: [Documentation/INTEGRATION.md](Documentation/INTEGRATION.md)
 - API stability (1.0): [Documentation/API_STABILITY.md](Documentation/API_STABILITY.md)
+- Production certification matrix: [Documentation/PRODUCTION_CERTIFICATION.md](Documentation/PRODUCTION_CERTIFICATION.md)
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Security policy: [SECURITY.md](SECURITY.md)
+- Support: [SUPPORT.md](SUPPORT.md)
+- Code of Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - DocC catalog: `Sources/PulsePlayer/PulsePlayer.docc`
 
 ---
@@ -361,15 +516,15 @@ CI (GitHub Actions on `main`): `swift test` · line-count · **iOS demo** · **t
 
 ---
 
-## Not included (yet)
+## Externally gated validation
 
 Honest scope for integrators evaluating the package:
 
 | Topic | Status |
 | --- | --- |
-| Native HLS interstitial ad parse | Host `AdCue` plugin only |
-| Real AV integration tests | Mock engine today; planned 1.0 |
-| FairPlay end-to-end without Apple FPS package | Not possible publicly |
+| Public Apple-HLS integration | Opt-in locally and scheduled in CI; network failures fail the run |
+| FairPlay end-to-end | Requires the host’s Apple FPS certificate, encrypted asset, license service and signed physical-device run |
+| Store/device certification | Follow the versioned evidence matrix; no package can fabricate host entitlements, CDN behavior or FPS credentials |
 
 ---
 

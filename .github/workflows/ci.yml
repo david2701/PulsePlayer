@@ -6,11 +6,28 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # Package requires Swift tools 6.3+ (swift-tools-version: 6.3).
 env:
-  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
 
 jobs:
+  api-stability:
+    name: API stability vs v1.0.0
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject SemVer-breaking changes
+        run: swift package diagnose-api-breaking-changes v1.0.0
+
   test:
     name: swift test
     runs-on: macos-26
@@ -28,16 +45,29 @@ jobs:
           }
           xcodebuild -version
           swift --version
-          if ! swift --version 2>&1 | grep -qE 'Swift version 6\.(3|4|5|6|7|8|9)'; then
-            echo "::error::Need Swift 6.3+ (package tools-version 6.3)."
-            exit 1
-          fi
+          swift package dump-package >/dev/null
 
-      - name: Run tests
-        run: swift test
+      - name: Run tests and enforce portable-core coverage
+        run: ./Scripts/check-coverage.sh 70
 
       - name: Line count guard
         run: ./Scripts/check-line-count.sh
+
+  thread-sanitizer:
+    name: thread sanitizer
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests under Thread Sanitizer
+        run: swift test --sanitize=thread
+
+  documentation:
+    name: validate DocC
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build documentation
+        run: ./Scripts/generate-docc.sh "$RUNNER_TEMP/PulsePlayerDocs"
 
   build-demo:
     name: build iOS demo
@@ -60,17 +90,14 @@ jobs:
         run: |
           set -euo pipefail
           xcodegen generate
-          DEST='platform=iOS Simulator,name=iPhone 17'
-          if ! xcrun simctl list devices available | grep -q 'iPhone 17'; then
-            DEST='platform=iOS Simulator,name=iPhone 16'
-          fi
-          echo "Building with -destination $DEST"
           xcodebuild \
             -project PulsePlayerDemo.xcodeproj \
             -scheme PulsePlayerDemo \
-            -destination "$DEST" \
+            -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath ./DerivedData \
-            build CODE_SIGNING_ALLOWED=NO
+            build \
+            CODE_SIGNING_ALLOWED=NO \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
 
   build-tv-demo:
     name: build tvOS demo
@@ -93,11 +120,11 @@ jobs:
         run: |
           set -euo pipefail
           xcodegen generate
-          DEST='platform=tvOS Simulator,name=Apple TV'
-          echo "Building with -destination $DEST"
           xcodebuild \
             -project PulsePlayerTVDemo.xcodeproj \
             -scheme PulsePlayerTVDemo \
-            -destination "$DEST" \
+            -destination 'generic/platform=tvOS Simulator' \
             -derivedDataPath ./DerivedData \
-            build CODE_SIGNING_ALLOWED=NO
+            build \
+            CODE_SIGNING_ALLOWED=NO \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES

@@ -12,12 +12,13 @@ Breaking changes here require a **major** version bump.
 | Source & config | `MediaSource`, `PlayerConfiguration`, `HTTPCookieValue` |
 | State | `PlayerStatus`, `PlayerStateMachine`, `PlayerError`, `PlayerErrorAction` |
 | Events | `PlayerEvent`, `makeEventStream()` |
+| Production events | `ProductionPlayerEvent`, `makeProductionEventStream()`, telemetry records/sink |
 | Metrics | `PlaybackMetrics`, `metrics` / `metricsSnapshot` |
 | UI | `PulsePlayerView`, `PlayerChromeMode`, `PlayerChromeTheme`, `PulsePlayerControls` |
 | Quality | `StreamQuality`, `setQuality` / `setQualityAuto`, `preferHardQualityLock` |
 | Tracks / subs | `MediaTrackInfo`, subtitle add/select/style APIs |
 | Pool / queue | `PlayerPool`, `PlaybackQueue` |
-| Platform | PiP / Now Playing configuration flags |
+| Platform | PiP / Now Playing / audio-session configuration flags |
 | Metadata | `PulsePlayerInfo` |
 
 ## Stable with platform limits
@@ -26,14 +27,15 @@ Breaking changes here require a **major** version bump.
 | --- | --- |
 | Offline | `OfflineDownloadManager` — **download** requires **iOS**. Catalog APIs compile elsewhere. |
 | FairPlay | `ContentKeyProviding`, `HTTPContentKeyProvider` — host must supply FPS materials. |
+| Persistable FairPlay | `PersistableContentKeyStoring`, `PersistableContentKeyFileStore` — host FPS lease rules still apply. |
 | tvOS UI | `PulsePlayerTVCommands`, `PulsePlayerTVControls` — living-room helpers. |
+| Native media | Interstitial schedule/monitoring and LL-HLS behavior follow the deployed AVFoundation version. |
 
 ## Experimental / evolving (may change in minors)
 
 Documented as best-effort; prefer isolating behind your own wrappers if you need stricter guarantees.
 
-- Ad cue plugin surface (`AdCue`, `AdCueHandling`) — host-driven only
-- Live DVR edge heuristics
+- Legacy ad cue plugin surface (`AdCue`, `AdCueHandling`) — host-driven only
 - Scrub thumbnail availability (asset-dependent)
 - Exact quality ladder parsing edge cases (master playlist variants)
 - Internal engine protocol `PlaybackControlling` (package-level)
@@ -44,7 +46,11 @@ Documented as best-effort; prefer isolating behind your own wrappers if you need
 2. **Swift 6.3+**, language mode 6, iOS/tvOS 17+.
 3. **AVPlayer-first** — no FFmpeg in core.
 4. Session is **long-lived**; do not recreate inside SwiftUI `body`.
-5. Headers/cookies apply to the **initial asset request** (AVFoundation limitation).
+5. Headers/cookies apply to PulsePlayer-owned asset, HLS-manifest, subtitle, and
+   offline requests. Segment propagation remains an AVFoundation/server contract.
+6. CI compares the public API against `v1.0.0` with
+   `swift package diagnose-api-breaking-changes`; production capabilities are
+   additive and do not expand the frozen `PlayerEvent` or engine protocols.
 
 ## Migration from 0.x
 

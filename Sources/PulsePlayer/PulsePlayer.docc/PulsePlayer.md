@@ -12,13 +12,14 @@ PulsePlayer is a long-lived, testable playback stack on top of `AVPlayer`:
 
 - ``PlayerSession`` — orchestration, state machine, events
 - ``PulsePlayerView`` — optional SwiftUI surface + chrome
-- Offline, FairPlay hooks, feed ``PlayerPool``, quality hard lock
+- Offline, FairPlay hooks, feed ``PlayerPool``, safe ABR caps and optional quality hard lock
 
 ## Topics
 
 ### Essentials
 
 - <doc:GettingStarted>
+- <doc:ProductionPlayback>
 - ``PlayerSession``
 - ``MediaSource``
 - ``PlayerConfiguration``
@@ -32,7 +33,10 @@ PulsePlayer is a long-lived, testable playback stack on top of `AVPlayer`:
 - ``PlayerChromeMode``
 - ``PlayerChromeTheme``
 - ``PulsePlayerControls``
-- ``PulsePlayerTVControls``
+
+The shared full chrome is focus-native on tvOS. The optional tvOS-only
+`PulsePlayerTVControls` surface for fully custom hosts is documented in
+<doc:ChromeAndThemes>; it is not symbol-linked in this iOS-generated catalog.
 
 ### Quality & tracks
 
@@ -46,6 +50,8 @@ PulsePlayer is a long-lived, testable playback stack on top of `AVPlayer`:
 - ``OfflineDownloadManager``
 - ``ContentKeyProviding``
 - ``HTTPContentKeyProvider``
+- ``PersistableContentKeyStoring``
+- ``PersistableContentKeyFileStore``
 
 ### Feeds & playlist
 

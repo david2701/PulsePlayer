@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a reproducible PulsePlayer defect.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Remove tokens, cookies, user data, and FairPlay material before submitting.
+        Report exploitable security issues privately via SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: PulsePlayer version
+      placeholder: 1.0.0 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Xcode, Swift, iOS/tvOS, device or Simulator
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Playback/lifecycle
+        - HLS/quality/tracks
+        - SwiftUI/accessibility
+        - Picture in Picture/Now Playing/audio
+        - Offline downloads
+        - FairPlay
+        - tvOS/focus/remote
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include sanitized code and exact steps.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and sanitized diagnostics
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: I removed credentials and private media data.
+          required: true
