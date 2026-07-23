@@ -22,7 +22,7 @@ jobs:
     name: API stability vs v1.0.0
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Reject SemVer-breaking changes
@@ -32,7 +32,7 @@ jobs:
     name: swift test
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Show toolchain
         run: |
@@ -57,7 +57,7 @@ jobs:
     name: thread sanitizer
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Run tests under Thread Sanitizer
         run: swift test --sanitize=thread
 
@@ -65,7 +65,7 @@ jobs:
     name: validate DocC
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build documentation
         run: ./Scripts/generate-docc.sh "$RUNNER_TEMP/PulsePlayerDocs"
 
@@ -74,7 +74,7 @@ jobs:
     runs-on: macos-26
     needs: test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Show toolchain
         run: |
@@ -104,7 +104,7 @@ jobs:
     runs-on: macos-26
     needs: test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Show toolchain
         run: |
